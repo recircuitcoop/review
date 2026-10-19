@@ -3305,12 +3305,12 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     void load(async () => {
-      const file = document2.querySelector("#markdown-file").files[0];
+      const file = document.querySelector("#markdown-file").files[0];
       if (!file) throw new Error("Choose a Markdown file first.");
-      const left = document2.querySelector("#left-label").value.trim(), right = document2.querySelector("#right-label").value.trim();
+      const left = document.querySelector("#left-label").value.trim(), right = document.querySelector("#right-label").value.trim();
       if (!left || !right) throw new Error("Both label names are required.");
-      const document2 = await readDocument(file);
-      installReview({ document: document2, labels: [{ id: "left", name: left, direction: "left" }, { id: "right", name: right, direction: "right" }] });
+      const source = await readDocument(file);
+      installReview({ document: source, labels: [{ id: "left", name: left, direction: "left" }, { id: "right", name: right, direction: "right" }] });
     });
   });
   reopen.addEventListener("submit", (event) => {
