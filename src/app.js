@@ -64,8 +64,8 @@ form.addEventListener('submit', event => {
     if (!file) throw new Error('Choose a Markdown file first.');
     const left = document.querySelector('#left-label').value.trim(), right = document.querySelector('#right-label').value.trim();
     if (!left || !right) throw new Error('Both label names are required.');
-    const document = await readDocument(file);
-    installReview({ document, labels: [{ id: 'left', name: left, direction: 'left' }, { id: 'right', name: right, direction: 'right' }] });
+    const source = await readDocument(file);
+    installReview({ document: source, labels: [{ id: 'left', name: left, direction: 'left' }, { id: 'right', name: right, direction: 'right' }] });
   });
 });
 reopen.addEventListener('submit', event => {
