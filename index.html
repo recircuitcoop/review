@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review — Markdown annotation</title>
+  <link rel="stylesheet" href="/src/review.css">
+</head>
+<body>
+  <header class="host-header"><span class="wordmark">review.</span><span class="badge">LOCAL MARKDOWN TOOL</span></header>
+  <main>
+    <section class="intro"><div class="eyebrow">Read. Select. Decide.</div><h1>Give every passage a direction.</h1><p>Open a Markdown file, select what matters, and assign either label. Export your selections as two JSON files. Your document stays in this browser.</p></section>
+    <form id="setup" class="setup">
+      <div class="setup-fields">
+        <label>Markdown file<input id="markdown-file" type="file" accept=".md,.markdown,text/markdown,text/plain" required></label>
+        <label>Left label<input id="left-label" value="Accept" required maxlength="80"></label>
+        <label>Right label<input id="right-label" value="Reject" required maxlength="80"></label>
+        <label>Export format<select id="export-format"><option value="split">One file per label</option><option value="grouped">One grouped file</option></select></label>
+        <button class="primary" type="submit">Start review</button>
+      </div>
+      <p id="host-status" role="status">Choose a Markdown file to begin. Use a current desktop browser.</p>
+    </form>
+    <form id="reopen" class="setup">
+      <h2>Open saved review</h2>
+      <div class="setup-fields">
+        <label>Original Markdown<input id="reopen-markdown" type="file" accept=".md,.markdown,text/markdown,text/plain" required></label>
+        <label>Saved annotation JSON<input id="saved-files" type="file" accept=".json,application/json" multiple required></label>
+        <button type="submit">Open saved review</button>
+      </div>
+      <p>Choose the unchanged original document and one grouped JSON or both label JSON files. Saved labels are restored automatically.</p>
+    </form>
+    <div class="host-actions" id="host-actions" hidden><label class="restore-control">Restore label JSON files<input id="restore-files" type="file" accept=".json,application/json" multiple></label></div>
+    <div id="downloads" aria-label="Download label files"></div>
+    <div id="annotator"></div>
+    <footer>No account. No upload. Unselected text stays unlabeled. Downloads include the full document text and your selected passages.</footer>
+  </main>
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>

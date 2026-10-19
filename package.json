@@ -1,0 +1,27 @@
+{
+  "name": "review-markdown",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Markdown selection and two-label review library",
+  "exports": "./dist/review-lib.js",
+  "scripts": {
+    "build": "node build.js",
+    "start": "node server.js",
+    "test": "node --test tests/model.test.js tests/gesture.test.js tests/server.test.js tests/files.test.js",
+    "test:browser": "playwright test",
+    "test:page": "node build-browser-check.js",
+    "check": "npm test && npm run test:browser"
+  },
+  "dependencies": {
+    "dompurify": "3.3.1",
+    "marked": "17.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "esbuild": "^0.25.12"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

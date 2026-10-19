@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "document": {
+    "id": "review.md",
+    "version": "4d95c4c76469cf309986c3a5229531886feb90bc608b12100b5360404501b36d",
+    "text": "A small review\nKeep this important sentence with a useful link.\nReject this sentence. Keep this repeated phrase: hello. And hello again.\nEmoji 🌍 and 世界 remain exact.\nA quoted paragraph.\nFirst list entry\nSecond list entry\nconst value = 42;\n",
+    "canonicalFormat": "review-text-v1",
+    "offsetUnit": "utf-16",
+    "endExclusive": true
+  },
+  "labels": [
+    {
+      "id": "left",
+      "name": "Accept",
+      "direction": "left"
+    },
+    {
+      "id": "right",
+      "name": "Reject",
+      "direction": "right"
+    }
+  ],
+  "selections": {
+    "right": [
+      {
+        "id": "2456e24b-f1d6-4ccb-a69c-93b86ef61929",
+        "documentId": "review.md",
+        "documentVersion": "4d95c4c76469cf309986c3a5229531886feb90bc608b12100b5360404501b36d",
+        "labelId": "right",
+        "start": 64,
+        "end": 136,
+        "quote": "Reject this sentence. Keep this repeated phrase: hello. And hello again.",
+        "prefix": "nt sentence with a useful link.\n",
+        "suffix": "\nEmoji 🌍 and 世界 remain exact.\nA"
+      }
+    ]
+  }
+}
