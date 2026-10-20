@@ -8,7 +8,7 @@
   "scripts": {
     "build": "node build.js",
     "start": "node server.js",
-    "test": "node --test tests/model.test.js tests/gesture.test.js tests/server.test.js tests/files.test.js",
+    "test": "node --test tests/model.test.js tests/gesture.test.js tests/server.test.js tests/files.test.js tests/theme.test.js tests/styles.test.js",
     "test:browser": "playwright test",
     "test:page": "node build-browser-check.js",
     "check": "npm test && npm run test:browser"

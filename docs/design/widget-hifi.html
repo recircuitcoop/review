@@ -1,0 +1,225 @@
+<div id="review-hifi" aria-label="Inline whisper flow study">
+<div class="state-previews viz-dotted-background" aria-label="All proposed whisper states shown together">
+<section data-variant="Reading"><h3>Reading — nothing selected</h3><div class="wf" aria-label="Reading without a selection"></div></section>
+<section data-variant="Pending selection"><h3>Text selected — not labeled yet</h3><div class="wf" aria-label="New pending selection"></div></section>
+<section data-variant="Label assigned"><h3>Label assigned — the actual name is confirmed</h3><div class="wf" aria-label="Assigned label with explicit checkmark"></div></section>
+<section data-variant="Precise keyboard selection"><h3>Precise keyboard selection</h3><div class="wf" aria-label="Precise keyboard selection"></div></section>
+<section data-variant="Editing saved annotation"><h3>Editing an existing annotation</h3><div class="wf" aria-label="Editing an existing saved annotation"></div></section>
+<section data-variant="After undo"><h3>After Undo — selection cleared</h3><div class="wf" aria-label="After an annotation was undone"></div></section>
+<section data-variant="Toolbar expanded"><h3>Toolbar swap — selection preserved</h3><div class="wf" aria-label="Pending selection with the action toolbar swapped in"></div></section>
+<section data-variant="Multiline and long labels"><h3>Narrow layout — multiline selection and long labels</h3><div class="wf narrow" aria-label="Multiline and long label layout tradeoff"></div></section>
+<section data-variant="Light appearance"><h3>Light appearance — the same selected passage</h3><div class="wf" aria-label="Light appearance reference"></div></section>
+</div>
+</div>
+<style>
+#review-hifi{color-scheme:light dark}
+#review-hifi .state-previews>section{padding:28px 12px 40px;box-sizing:border-box}
+#review-hifi .state-previews>section>h3{max-width:700px;margin:0 auto 14px;font:500 13px/1.5 system-ui,sans-serif;letter-spacing:.015em}
+#review-hifi .wf{--wf-paper:light-dark(#fffefa,#1c201f);--wf-ink:light-dark(#252e2b,#e9eeeb);--wf-muted:light-dark(#626e68,#a5b3ac);--wf-line:light-dark(#dce2dc,#3b4640);--wf-soft:light-dark(#f1f4ef,#282f2b);--wf-selection:light-dark(#e7ece6,#35423a);--wf-nav:light-dark(#f8f9f5,#202623);--wf-accent:light-dark(#226453,#a0d7bd);--wf-accent-fill:light-dark(#e8f2ec,#2c4439);--wf-other:light-dark(#885634,#e7ba92);--wf-other-fill:light-dark(#f9efe4,#45372c);--wf-button:light-dark(#263f35,#c8dfd0);--wf-button-text:light-dark(#fffefa,#192c22);--wf-shadow:light-dark(#1c302012,#0003);background:var(--wf-paper);color:var(--wf-ink);border:1px solid var(--wf-line);border-radius:12px;font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:700px;margin:auto;overflow-wrap:anywhere;box-shadow:0 8px 28px var(--wf-shadow)}
+#review-hifi .wf *{box-sizing:border-box}
+#review-hifi .wf button{background:transparent;color:var(--wf-ink);font:inherit;border:0;border-radius:6px;padding:7px 9px;min-height:36px;transition:background-color .12s ease,color .12s ease}
+#review-hifi .wf button:disabled{opacity:.4}
+#review-hifi .wf button:not(:disabled):hover{background:var(--wf-soft)}
+#review-hifi .wf header{border-bottom:1px solid var(--wf-line);background:var(--wf-nav);border-radius:11px 11px 0 0}
+#review-hifi .wf .navline{display:flex;gap:8px;align-items:center;padding:9px 18px;flex-wrap:nowrap;height:62px}
+#review-hifi .wf .filename{font:500 12px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--wf-muted);flex:1;min-width:0;display:flex;align-items:center;gap:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#review-hifi .wf .filename svg{flex:none;opacity:.75}
+#review-hifi .wf .toggle{flex:none;letter-spacing:.08em}
+#review-hifi .wf .done{border:1px solid transparent;font:500 12px/1.5 system-ui;padding:8px 14px;min-width:60px;background:var(--wf-button);color:var(--wf-button-text)}
+#review-hifi .wf .done:not(:disabled):hover{background:var(--wf-button);filter:brightness(1.08)}
+#review-hifi .wf .commands{display:flex;gap:4px;flex-wrap:nowrap;align-items:center;flex:1;min-width:0;overflow-x:auto;scrollbar-width:thin}
+#review-hifi .wf .commands button{font:400 12px/1.5 system-ui;flex:none;white-space:nowrap;padding:7px 8px}
+#review-hifi .wf .commands .label-command{border:1px solid var(--wf-line);font-weight:500}
+#review-hifi .wf .commands [data-assign="a"]{color:var(--wf-accent);border-color:transparent;background:var(--wf-accent-fill)}
+#review-hifi .wf .commands [data-assign="b"]{color:var(--wf-other);border-color:transparent;background:var(--wf-other-fill)}
+#review-hifi .wf .commands [data-action="help"]{display:none}
+#review-hifi .wf .help{font:12px/1.65 system-ui;color:var(--wf-muted);margin:0;padding:12px 18px;border-top:1px solid var(--wf-line);background:var(--wf-soft)}
+#review-hifi .wf article{padding:36px 38px 26px}
+#review-hifi .wf .eyebrow{font:500 11px/1.5 system-ui;color:var(--wf-muted);letter-spacing:.1em}
+#review-hifi .wf h2{font:500 27px/1.3 system-ui;letter-spacing:-.025em;margin:10px 0 24px;color:var(--wf-ink)}
+#review-hifi .wf article>p{font:400 16px/1.85 "Iowan Old Style","Palatino Linotype",Georgia,serif;margin:0 0 24px}
+#review-hifi .wf .passage{display:inline;font:inherit;text-align:left;padding:1px 0;min-height:0;border-radius:0;box-decoration-break:clone;-webkit-box-decoration-break:clone;transition:none}
+#review-hifi .wf .passage:not(:disabled):hover{background:transparent}
+#review-hifi .wf .passage.pending,#review-hifi .wf .passage.pending:not(:disabled):hover{background:var(--wf-selection);border-bottom:1px solid var(--wf-ink)}
+#review-hifi .wf .passage.committed,#review-hifi .wf .passage.committed:not(:disabled):hover{background:var(--wf-accent-fill);border-bottom:2px solid var(--wf-accent)}
+#review-hifi .wf .passage.committed[data-label="b"],#review-hifi .wf .passage.committed[data-label="b"]:not(:disabled):hover{background:var(--wf-other-fill);border-bottom-color:var(--wf-other)}
+#review-hifi .wf .passage.editing{outline:1px solid var(--wf-line);outline-offset:4px}
+#review-hifi .wf .whisper{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px;font:400 12px/1.65 system-ui;color:var(--wf-muted);margin:-10px 0 26px;min-height:24px}
+#review-hifi .wf .whisper-status{font-weight:400;text-align:center;white-space:nowrap;letter-spacing:-.01em}
+#review-hifi .wf .end{min-width:0;overflow-wrap:anywhere}
+#review-hifi .wf .end:last-child{text-align:right}
+#review-hifi .wf .active{font-weight:500;text-decoration:underline;text-underline-offset:4px;color:var(--wf-accent)}
+#review-hifi .wf .active[data-end="b"]{color:var(--wf-other)}
+#review-hifi .wf .whisper[data-assigned="a"] .whisper-status{color:var(--wf-accent);font-weight:500}
+#review-hifi .wf .whisper[data-assigned="b"] .whisper-status{color:var(--wf-other);font-weight:500}
+#review-hifi .wf .code{white-space:pre-wrap;padding:16px 18px;background:var(--wf-soft);font:12px/1.8 ui-monospace,SFMono-Regular,monospace;border:1px solid var(--wf-line);border-radius:7px;margin:0 0 24px;color:var(--wf-ink)}
+#review-hifi .wf article>p.note{font:12px/1.65 system-ui;color:var(--wf-muted);margin-bottom:0}
+#review-hifi .wf .keyboard-button{display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--wf-muted)}
+#review-hifi .wf .keys-dialog{position:absolute;left:0;right:0;bottom:auto;margin:0 auto;background:var(--wf-paper);color:var(--wf-ink);border:1px solid var(--wf-line);border-radius:12px;padding:22px;width:min(470px,calc(100% - 28px));max-height:calc(100% - 28px);overflow:auto;font:13px/1.5 system-ui;box-shadow:0 16px 60px light-dark(#10241b30,#0006)}
+#review-hifi .wf .keys-dialog::backdrop{background:light-dark(#15271d55,#0009)}
+#review-hifi .wf .keys-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+#review-hifi .wf .keys-heading h3{font:500 17px/1.4 system-ui;letter-spacing:-.015em;margin:0}
+#review-hifi .wf .key-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--wf-line)}
+#review-hifi .wf .key-combo{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+#review-hifi .wf kbd{font:12px/1.5 ui-monospace,monospace;display:inline-block;min-width:25px;text-align:center;padding:3px 6px;border:1px solid var(--wf-line);border-bottom-width:2px;border-radius:5px;background:var(--wf-soft);color:var(--wf-ink)}
+#review-hifi .wf .keys-note{font-size:12px;color:var(--wf-muted);margin:14px 0 0}
+#review-hifi .wf .keys-dialog details{margin-top:16px}
+#review-hifi .wf [hidden]{display:none!important}
+#review-hifi .wf.narrow{max-width:350px}
+#review-hifi .wf.narrow article{padding:28px 22px 24px}
+#review-hifi .wf.narrow h2{font-size:25px}
+#review-hifi .wf.narrow .whisper{align-items:start}
+@media(max-width:500px){#review-hifi .wf article{padding:28px 22px 24px}#review-hifi .wf h2{font-size:25px}#review-hifi .state-previews>section{padding-inline:4px}}
+@media(pointer:coarse){#review-hifi .wf button{min-height:44px}#review-hifi .wf .navline{padding-block:9px}#review-hifi .wf .passage{min-height:0}}
+@media(prefers-reduced-motion:reduce){#review-hifi .wf button{transition:none}}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('review-hifi');
+const mac=/Mac|iPhone|iPad/.test(navigator.platform);
+const shortcut=mac?'Option':'Alt';const undoKey=mac?'Cmd+Z':'Ctrl+Z';
+const presets={Application:{a:'Accept',b:'Reject'},Research:{a:'Evidence',b:'Question'},Long:{a:'Needs source verification',b:'Ready for publication'}};
+const saved=window.openai?.widgetState?.privateContent?.reviewHifi;
+const scenes=['Reading','Pending','Precise selection','Just labeled','Editing saved','After undo','Toolbar open'];
+const views={};
+function persist(){window.openai?.setWidgetState?.({modelContent:{design:'Toolbar swap and state-led whisper'},privateContent:{reviewHifi:Object.fromEntries(Object.entries(views).map(([name,v])=>[name,v.capture()]))}})?.catch(()=>{});}
+function createPreview(initial){
+ let data=structuredClone(initial),past=[],future=[];
+ return {
+  read:()=>data,
+  replace(next){data=structuredClone(next);past=[];future=[];},
+  change(next){past.push(structuredClone(data.labels));future=[];data.labels=next;data.pending=null;data.active=null;data.precise=false;},
+  undo(){if(!past.length)return false;future.push(structuredClone(data.labels));data.labels=past.pop();data.pending=null;data.active=null;data.precise=false;return true;},
+  redo(){if(!future.length)return false;past.push(structuredClone(data.labels));data.labels=future.pop();data.pending=null;data.active=null;data.precise=false;return true;},
+  canUndo:()=>past.length>0,canRedo:()=>future.length>0,
+  snapshot:()=>structuredClone({data,past,future}),
+  restore(snapshot){data=structuredClone(snapshot.data);past=structuredClone(snapshot.past);future=structuredClone(snapshot.future);}
+ };
+}
+root.querySelectorAll('.wf').forEach((el,index)=>{
+ const name=el.parentElement.dataset.variant;
+ const prior=saved?.[name];
+ const initialScenes={'Pending selection':'Pending','Reading':'Reading','Label assigned':'Just labeled','Precise keyboard selection':'Precise selection','Editing saved annotation':'Editing saved','After undo':'After undo','Toolbar expanded':'Toolbar open','Multiline and long labels':'Pending','Light appearance':'Pending'};
+ const isStress=name==='Multiline and long labels';
+ const options={scene:scenes.includes(prior?.scene)?prior.scene:initialScenes[name],labels:Object.hasOwn(presets,prior?.labels)?prior.labels:isStress?'Long':'Application',narrow:prior?.narrow??isStress};
+ options.appearance=['System','Light','Night'].includes(prior?.appearance)?prior.appearance:name==='Light appearance'?'Light':'System';
+ let renderedScene=options.scene;
+ const session=createPreview({labels:{},pending:null,active:null,precise:false});
+ let expanded=false,receipt=null,notice='',anchor='one';
+ el.innerHTML=`<header><div class="navline"><span class="filename">project-notes.md</span><div class="commands" id="wf-controls-${index}" hidden><button type="button" class="label-command cursor-interaction" data-assign="a"></button><button type="button" class="label-command cursor-interaction" data-assign="b"></button><button type="button" class="cursor-interaction" data-action="undo">Undo</button><button type="button" class="cursor-interaction" data-action="redo">Redo</button><button type="button" class="cursor-interaction" data-action="clear">Clear</button><button type="button" class="cursor-interaction" data-action="annotations">Annotations</button><button type="button" class="cursor-interaction" data-action="help">Help</button></div><button type="button" class="toggle cursor-interaction" aria-label="Expand or collapse review controls" aria-controls="wf-controls-${index}" aria-expanded="false">•••</button><button type="button" class="done cursor-interaction">Done</button></div><p class="help" hidden></p></header><article><div class="eyebrow">PROJECT NOTES / 03</div><h2>A reliable review flow</h2><p>The reader should always know what is selected and what has been labeled.</p><p data-paragraph="one"><button type="button" class="passage cursor-interaction" data-passage="one">Keep local work available when saving fails. A failed export must leave the review open for retry.</button></p><div class="whisper"><span class="end" data-end="a"></span><span class="whisper-status"></span><span class="end" data-end="b"></span></div><p data-paragraph="two"><button type="button" class="passage cursor-interaction" data-passage="two">Give every annotation a stable identity, including passages that overlap.</button></p><pre class="code"><code>review.restore(savedAnnotations)</code></pre><p class="note">Every annotation remains independently editable.</p></article>`;
+ const toggle=el.querySelector('.toggle'),panel=el.querySelector('.commands'),help=el.querySelector('.help'),whisper=el.querySelector('.whisper');
+ const fileIcon=document.createElement('i');fileIcon.dataset.lucide='file-text';fileIcon.setAttribute('aria-hidden','true');el.querySelector('.filename').prepend(fileIcon);
+ const keyboard=document.createElement('button');keyboard.type='button';keyboard.className='keyboard-button cursor-interaction';keyboard.setAttribute('aria-label','Keyboard shortcuts');keyboard.setAttribute('aria-haspopup','dialog');keyboard.innerHTML='<i data-lucide="keyboard" aria-hidden="true"></i>';toggle.before(keyboard);
+ const dialog=document.createElement('dialog');dialog.className='keys-dialog';dialog.setAttribute('aria-labelledby',`wf-keys-title-${index}`);el.append(dialog);
+ const command=mac?'⌘':'Ctrl';const option=mac?'⌥':'Alt';
+ const caps=keys=>keys.map(key=>`<kbd>${key}</kbd>`).join('');
+ const row=(label,keys)=>{const div=document.createElement('div');div.className='key-row';const text=document.createElement('span');text.textContent=label;const combo=document.createElement('span');combo.className='key-combo';combo.innerHTML=caps(keys);div.append(text,combo);return div;};
+ function openShortcuts(){
+  const labels=presets[options.labels];
+  dialog.innerHTML=`<div class="keys-heading"><h3 id="wf-keys-title-${index}">Keyboard shortcuts</h3><button type="button" class="cursor-interaction" aria-label="Close keyboard shortcuts"><i data-lucide="x" aria-hidden="true"></i></button></div>`;
+  [[`Label ${labels.a}`,[option,'←']],[`Label ${labels.b}`,[option,'→']],['Cancel / close',['Esc']],['Undo annotation',[command,'Z']],['Redo annotation',[command,'⇧','Z']],['Remove active target',[mac?'⌫':'Delete']],['Done & export',[command,'↵']]].forEach(([text,keys])=>dialog.append(row(text,keys)));
+  const details=document.createElement('details');const summary=document.createElement('summary');summary.className='cursor-interaction';summary.textContent='Selection & navigation';details.append(summary);
+  [['Move between controls',['Tab']],['Previous control',['⇧','Tab']],['Next / previous block',[option,'↓ / ↑']],['Select focused block',['↵']],['Precise selection mode',['F2']],['Extend exact selection',['⇧','← / →']],['Extend selection by word',[mac?'⌥':'Ctrl','⇧','← / →']],['Next / previous annotation',[option,'N / P']],['Choose overlapping annotation',['↑ / ↓','↵']],['Show this popup',['F1']]].forEach(([text,keys])=>details.append(row(text,keys)));dialog.append(details);
+  const note=document.createElement('p');note.className='keys-note';note.textContent='Undo reverses the latest annotation change and clears pending text. Precise-selection mode uses arrows to adjust text, rather than assign a label. Escape closes this popup first; your selection stays available.';dialog.append(note);
+  dialog.querySelector('[aria-label="Close keyboard shortcuts"]').onclick=()=>dialog.close();
+  if(globalThis.lucide)lucide.createIcons({attrs:{width:18,height:18}});
+  // This storyboard's iframe spans all seven states; centre-in-iframe would be offscreen.
+  dialog.style.top=`${Math.max(12,keyboard.getBoundingClientRect().bottom+10)}px`;
+  if(!dialog.open)dialog.showModal();
+ }
+ keyboard.onclick=openShortcuts;
+ dialog.onclose=()=>keyboard.focus();
+ const live=el.querySelector('.whisper-status');live.setAttribute('role','status');live.setAttribute('aria-live','polite');
+ function announce(message){if(live.textContent!==message)live.textContent=message;}
+ function render(){
+  const data=session.read(),labels=presets[options.labels],target=data.pending||data.active;
+  const marked=data.active||receipt;
+  const assigned=marked?data.labels[marked]:null;
+  whisper.dataset.assigned=assigned||'';
+  el.style.colorScheme=options.appearance==='System'?'light dark':options.appearance==='Light'?'light':'dark';
+  whisper.hidden=!(target||(receipt&&data.labels[receipt]));
+  el.classList.toggle('narrow',options.narrow);
+  panel.hidden=!expanded;toggle.setAttribute('aria-expanded',String(expanded));el.querySelector('.filename').hidden=expanded;
+  el.querySelector('.done').hidden=false;
+  toggle.setAttribute('aria-label',expanded?'Restore document navbar':'Swap navbar to review actions');
+  el.querySelector(`[data-paragraph="${anchor}"]`).after(whisper);
+  el.querySelectorAll('[data-passage]').forEach(button=>{
+   const id=button.dataset.passage;button.classList.toggle('pending',data.pending===id);button.classList.toggle('committed',!!data.labels[id]);button.classList.toggle('editing',data.active===id);
+   button.dataset.label=data.labels[id]||'';
+   button.setAttribute('aria-label',data.labels[id]?`Edit annotation: ${labels[data.labels[id]]}`:'Select passage');
+  });
+  let message='';
+  const compact=options.narrow||window.matchMedia('(max-width:500px)').matches;
+  if(data.precise)message=session.canUndo()?`Selecting · ${undoKey} undo`:'Selecting text';
+  else if(data.pending)message=expanded?'Unlabeled · choose above':compact?'Unlabeled':'Unlabeled · scroll over selection ↔';
+  else if(data.active)message=compact?`✓ ${labels[assigned]}`:`✓ ${labels[assigned]} · ••• to edit`;
+  else if(receipt)message=`✓ ${labels[assigned]} · ${undoKey} undo`;
+  announce(message);
+  ['a','b'].forEach(id=>{
+   const word=(assigned===id?'✓ ':'')+labels[id];
+   const end=el.querySelector(`[data-end="${id}"]`);end.textContent=id==='a'?`← ${word}`:`${word} →`;end.classList.toggle('active',assigned===id);
+   const button=el.querySelector(`[data-assign="${id}"]`);button.textContent=id==='a'?`← ${labels[id]}`:`${labels[id]} →`;button.disabled=!target||data.precise;
+  });
+  el.querySelector('[data-action="undo"]').disabled=!session.canUndo();el.querySelector('[data-action="redo"]').disabled=!session.canRedo();el.querySelector('[data-action="clear"]').disabled=!target;
+  whisper.setAttribute('aria-label',`${message}. Left label ${labels.a}. Right label ${labels.b}.${assigned?' Assigned '+labels[assigned]+'.':''}`);
+ }
+ function resetScene(){
+  renderedScene=options.scene;
+  session.replace({labels:{},pending:null,active:null,precise:false});expanded=false;receipt=null;notice='';anchor='one';help.hidden=true;
+  const data=session.read();
+  if(['Pending','Precise selection','Toolbar open'].includes(options.scene))data.pending='one';
+  if(options.scene==='Precise selection'){session.change({two:'b'});data.pending='one';data.precise=true;}
+  if(['Just labeled','Editing saved','After undo'].includes(options.scene)){session.change({one:'a'});if(options.scene==='Just labeled')receipt='one';if(options.scene==='Editing saved')data.active='one';if(options.scene==='After undo'){session.undo();notice='Annotation undone · select text';}}
+  expanded=options.scene==='Toolbar open';render();
+ }
+ function classify(id){const data=session.read();const target=data.pending||data.active;if(!target||data.precise)return;session.change({...data.labels,[target]:id});receipt=target;anchor=target;notice='';help.hidden=true;render();persist();}
+ function history(direction){const done=session[direction]();if(!done)return;receipt=null;notice=direction==='undo'?'Annotation undone · select text':'Annotation redone · select text';render();persist();}
+ el.querySelectorAll('[data-passage]').forEach(button=>button.onclick=()=>{
+  button.focus();const data=session.read(),id=button.dataset.passage;
+  data.pending=data.labels[id]?null:id;data.active=data.labels[id]?id:null;data.precise=false;anchor=id;receipt=null;notice='';help.hidden=true;render();persist();
+ });
+ toggle.onclick=()=>{expanded=!expanded;if(!expanded){help.hidden=true;toggle.focus();}render();persist();};
+ el.querySelectorAll('[data-assign]').forEach(b=>b.onclick=()=>classify(b.dataset.assign));
+ el.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>{
+  const data=session.read();
+  if(b.dataset.action==='undo')return history('undo');
+  if(b.dataset.action==='redo')return history('redo');
+  if(b.dataset.action==='clear'){data.pending=null;data.active=null;data.precise=false;receipt=null;notice='';render();persist();return;}
+  if(b.dataset.action==='help'){openShortcuts();return;}
+  help.hidden=false;
+  if(b.dataset.action==='annotations')help.textContent=Object.keys(data.labels).length?Object.entries(data.labels).map(([id,label])=>`Passage ${id}: ${presets[options.labels][label]}`).join(' · '):'No committed annotations.';
+  if(b.dataset.action==='help')help.textContent=`Select a passage, then hover its highlight and scroll horizontally to label (proposed behavior). ${shortcut}+Left / Right labels pending text or edits the active annotation. F2 finishes precise selection. ${undoKey} reverses history and clears the target. Open ••• for mouse-accessible controls.`;
+ });
+ el.querySelector('.done').onclick=()=>{help.hidden=false;help.textContent=session.read().pending?'Label or clear the pending text before finishing.':'Preview only · Done would automatically export the review in the configured format.';render();};
+ el.addEventListener('keydown',event=>{
+  if(dialog.open)return;
+  if(event.key==='F1'){event.preventDefault();openShortcuts();return;}
+  const data=session.read();
+  if(event.key==='Escape'){event.preventDefault();if(expanded){expanded=false;help.hidden=true;toggle.focus();}else{data.pending=null;data.active=null;data.precise=false;receipt=null;notice='';}render();persist();return;}
+  if(event.key==='F2'){event.preventDefault();if(data.pending)data.precise=!data.precise;render();persist();return;}
+  if((mac?event.metaKey:event.ctrlKey)&&!event.altKey&&event.key.toLowerCase()==='z'){event.preventDefault();history(event.shiftKey?'redo':'undo');return;}
+  if(data.precise)return;
+  if(event.altKey&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&['ArrowLeft','ArrowRight'].includes(event.key)){if(data.pending||data.active){event.preventDefault();classify(event.key==='ArrowLeft'?'a':'b');}}
+ });
+ function capture(){return {...options,session:session.snapshot(),expanded,receipt,notice,anchor};}
+ function restore(snapshot){
+  renderedScene=options.scene;
+  if(!snapshot.session){resetScene();return;}
+  session.restore(snapshot.session);expanded=!!snapshot.expanded;receipt=['one','two'].includes(snapshot.receipt)?snapshot.receipt:null;notice=typeof snapshot.notice==='string'?snapshot.notice:'';anchor=snapshot.anchor==='two'?'two':'one';render();
+ }
+ views[name]={options,resetScene,render,capture,restore};resetScene();if(prior?.session)restore(prior);
+ if(globalThis.Tweak){const tweak=new Tweak({container:el,onChange:()=>{if(options.scene!==renderedScene)resetScene();else render();persist();}});tweak.addSelect(options,'scene',{label:'Flow state',options:scenes});tweak.addSelect(options,'labels',{label:'Host label values',options:Object.keys(presets)});tweak.addSelect(options,'appearance',{label:'Appearance',options:['System','Light','Night']});tweak.addToggle(options,'narrow',{label:'Narrow layout'});}
+});
+if(globalThis.lucide)lucide.createIcons({attrs:{width:18,height:18}});
+window.addEventListener('openai:set_globals',event=>{
+ const incoming=event.detail?.globals?.widgetState?.privateContent?.reviewHifi;if(!incoming)return;
+ Object.entries(views).forEach(([name,v])=>{const next=incoming[name];if(!next)return;if(scenes.includes(next.scene))v.options.scene=next.scene;if(Object.hasOwn(presets,next.labels))v.options.labels=next.labels;if(['System','Light','Night'].includes(next.appearance))v.options.appearance=next.appearance;if(typeof next.narrow==='boolean')v.options.narrow=next.narrow;v.restore(next);});
+});
+window.addEventListener('resize',()=>Object.values(views).forEach(v=>v.render()));
+// These are local storyboard transitions, not native Range/Selection or gesture handling.
+const proof=createPreview({labels:{},pending:'one',active:null,precise:false});
+proof.change({one:'a'});console.assert(proof.read().pending===null&&proof.read().active===null,'Commit clears targets');
+proof.undo();console.assert(proof.read().pending===null&&Object.keys(proof.read().labels).length===0,'Undo does not recreate pending text');
+proof.redo();console.assert(proof.read().pending===null&&proof.read().labels.one==='a','Redo restores annotation only');
+})();
+</script>

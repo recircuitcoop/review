@@ -3,6 +3,8 @@ import DOMPurify from '../node_modules/dompurify/dist/purify.es.mjs';
 import { ReviewSession, validateOptions } from './model.js';
 import { canonicalText } from './text.js';
 import { swipeDirection } from './gesture.js';
+import { applyReviewStyles } from './styles.js';
+export { defaultReviewStyles } from './styles.js';
 
 const DEFAULT_SHORTCUTS = {
   nextBlock: ['Alt+ArrowDown'], previousBlock: ['Alt+ArrowUp'], selectBlock: ['Enter'], precise: ['F2'],
@@ -47,7 +49,8 @@ function shortcutMap(overrides = {}) {
     if (bindings.has(key)) throw new Error(`Shortcut conflict: ${value}`);
     bindings.set(key, command);
   }
-  return { effective: defaults, command(event) {
+  const display = Object.fromEntries(Object.entries(defaults).map(([name, keys]) => [name, keys.map(key => key.replace(/\bmod\b/gi, mac ? 'Cmd' : 'Ctrl').replace(/\bmeta\b/gi, mac ? 'Cmd' : 'Meta'))]));
+  return { effective: defaults, display, command(event) {
     const modifiers = [];
     if (event.ctrlKey) modifiers.push('ctrl'); if (event.altKey) modifiers.push('alt');
     if (event.shiftKey) modifiers.push('shift'); if (event.metaKey) modifiers.push('meta');
@@ -66,6 +69,7 @@ export function mountReview(container, options) {
   if (!['grouped', 'split'].includes(format)) throw new Error('Export format must be grouped or split.');
   const original = [...container.childNodes];
   const root = element('section', 'review'); root.setAttribute('aria-label', 'Document annotator');
+  applyReviewStyles(root, options.styles);
   const toolbar = element('div', 'review-toolbar'); toolbar.setAttribute('role', 'group'); toolbar.setAttribute('aria-label', 'Annotation controls');
   const surface = element('article', 'review-document'); surface.tabIndex = 0; surface.setAttribute('aria-label', 'Read-only document');
   surface.innerHTML = DOMPurify.sanitize(marked.parse(options.document.markdown, { gfm: false }), { ALLOWED_TAGS: TAGS, ALLOWED_ATTR: ['href', 'title', 'start'], ALLOW_DATA_ATTR: false });
@@ -81,7 +85,7 @@ export function mountReview(container, options) {
   const token = `review-${crypto.randomUUID()}`;
   const names = { left: `${token}-left`, right: `${token}-right`, pending: `${token}-pending`, active: `${token}-active` };
   const style = element('style');
-  style.textContent = `::highlight(${names.left}) { background: #c5eddc; color: #102d25; } ::highlight(${names.right}) { background: #ffdac7; color: #512510; } ::highlight(${names.pending}) { background: #b9d6ff; color: #142f58; } ::highlight(${names.active}) { background: #e3d0ff; color: #30204b; text-decoration: underline; }`;
+  style.textContent = `::highlight(${names.left}) { background: var(--review-mark-left-bg); color: var(--review-mark-left-text); text-decoration: underline solid var(--review-mark-left-border) 2px; } ::highlight(${names.right}) { background: var(--review-mark-right-bg); color: var(--review-mark-right-text); text-decoration: underline solid var(--review-mark-right-border) 2px; } ::highlight(${names.pending}) { background: var(--review-mark-pending-bg); color: var(--review-mark-pending-text); text-decoration: underline solid var(--review-mark-pending-text) 1px; } ::highlight(${names.active}) { background: var(--review-mark-active-bg); color: var(--review-mark-active-text); text-decoration: underline; }`;
   root.append(style);
   container.replaceChildren(root);
   const text = canonicalText(surface);
@@ -225,8 +229,8 @@ export function mountReview(container, options) {
   }
   function showHelp() {
     const content = element('dl', 'review-shortcuts');
-    for (const [command, keys] of Object.entries(shortcuts.effective)) content.append(element('dt', '', command), element('dd', '', keys.join(' / ')));
-    content.append(element('dt', '', 'Native selection'), element('dd', '', 'Tab / Shift+Tab: normal focus. In F2 mode: arrows move; Shift+arrows select; Ctrl+Shift+Left/Right (Windows/Linux) or Option+Shift+Left/Right (macOS) extends by word.'));
+    for (const [command, keys] of Object.entries(shortcuts.display)) content.append(element('dt', '', command), element('dd', '', keys.join(' / ')));
+    content.append(element('dt', '', 'Native selection'), element('dd', '', 'Tab / Shift+Tab: normal focus. In F2 mode: arrows move; Shift+arrows select; Ctrl+Shift+Left/Right (Windows/Linux) or Alt+Shift+Left/Right (macOS) extends by word.'));
     openDialog('Keyboard shortcuts', content); return true;
   }
   async function finish() {
@@ -295,7 +299,7 @@ export function mountReview(container, options) {
 
   for (const [name, title] of [['left', left.name], ['right', right.name], ['clear', 'Clear selection'], ['remove', 'Delete annotation'], ['undo', 'Undo'], ['redo', 'Redo'], ['previousBlock', 'Previous block'], ['nextBlock', 'Next block'], ['selectBlock', 'Select block'], ['precise', 'Precise selection'], ['previousAnnotation', 'Previous annotation'], ['nextAnnotation', 'Next annotation'], ['export', 'Export files'], ['finish', 'Done'], ['help', 'Shortcut help']]) {
     const button = element('button', `review-command review-${name}`, title); button.type = 'button'; button.dataset.command = name;
-    button.title = `${title} (${shortcuts.effective[name].join(' / ')})`; button.setAttribute('aria-keyshortcuts', shortcuts.effective[name].join(' ').replaceAll('Mod', /Mac/.test(navigator.platform) ? 'Meta' : 'Control'));
+    button.title = `${title} (${shortcuts.display[name].join(' / ')})`; button.setAttribute('aria-keyshortcuts', shortcuts.effective[name].join(' ').replace(/\bmod\b/gi, /Mac/.test(navigator.platform) ? 'Meta' : 'Control').replace(/\bctrl\b/gi, 'Control'));
     toolbar.append(button);
   }
   listen(toolbar, 'click', event => {

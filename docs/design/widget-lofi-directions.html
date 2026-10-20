@@ -1,0 +1,113 @@
+<div id="review-discreet">
+  <div class="viz-carousel viz-dotted-background" aria-label="Discreet review widget concepts">
+    <section data-variant="Inline whisper"><div class="dw whisper" aria-label="Inline whisper concept"></div></section>
+    <section data-variant="Quiet footer" hidden><div class="dw footer" aria-label="Quiet footer concept"></div></section>
+    <section data-variant="Margin note" hidden><div class="dw margin" aria-label="Margin note concept"></div></section>
+    <section data-variant="Underline only" hidden><div class="dw underline" aria-label="Underline only concept"></div></section>
+    <section data-variant="Brief receipt" hidden><div class="dw receipt" aria-label="Brief receipt concept"></div></section>
+  </div>
+</div>
+<style>
+#review-discreet{color-scheme:light dark}
+#review-discreet .viz-carousel>section{min-height:640px;padding:22px 8px 10px;box-sizing:border-box}
+#review-discreet .dw{--dw-paper:light-dark(#fff,#222);--dw-ink:light-dark(#242424,#eee);--dw-muted:light-dark(#626262,#bcbcbc);--dw-line:light-dark(#d3d3d3,#5b5b5b);--dw-wash:light-dark(#f2f2f2,#303030);--dw-pending:light-dark(#e4e4e4,#464646);max-width:680px;margin:auto;background:var(--dw-paper);color:var(--dw-ink);border:1px solid var(--dw-line);border-radius:5px;font:14px/1.65 system-ui,sans-serif;overflow-wrap:anywhere}
+#review-discreet .dw *{box-sizing:border-box}
+#review-discreet .dw header{display:flex;gap:14px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--dw-line)}
+#review-discreet .dw .filename{flex:1;color:var(--dw-muted);font-size:12px}
+#review-discreet .dw button{font:inherit;color:var(--dw-ink);background:transparent;border:0;border-radius:3px;padding:7px 10px;min-height:36px}
+#review-discreet .dw button:disabled{opacity:.45}
+#review-discreet .dw .done{border:1px solid var(--dw-line);font-size:12px}
+#review-discreet .dw article{padding:32px 40px 24px}
+#review-discreet .dw .eyebrow{font:12px/1.5 system-ui;color:var(--dw-muted);letter-spacing:.05em}
+#review-discreet .dw h2{font:500 25px/1.3 system-ui;margin:9px 0 24px}
+#review-discreet .dw p{margin:0 0 21px}
+#review-discreet .dw .selected{display:inline;font:inherit;line-height:inherit;padding:1px 0;min-height:0;border-radius:0;text-align:left;background:var(--dw-pending);border-bottom:1px dashed var(--dw-ink)}
+#review-discreet .dw[data-stage="Labeled"] .selected{background:var(--dw-wash);border-bottom:2px solid var(--dw-ink)}
+#review-discreet .dw[data-stage="Reading"] .selected{background:transparent;border-bottom:0}
+#review-discreet .dw .plain{color:var(--dw-muted)}
+#review-discreet .dw .code{white-space:pre-wrap;background:var(--dw-wash);padding:14px;font:12px/1.7 ui-monospace,monospace;margin:0 0 22px}
+#review-discreet .dw .signal{font:12px/1.6 system-ui;color:var(--dw-muted);min-height:20px}
+#review-discreet .dw .local-signal{margin:-11px 0 20px}
+#review-discreet .dw .foot-signal{padding:10px 20px;border-top:1px solid var(--dw-line);min-height:42px}
+#review-discreet .dw .margin-layout{display:grid;grid-template-columns:minmax(0,1fr) 125px;gap:20px}
+#review-discreet .dw .margin-signal{border-left:1px solid var(--dw-line);padding-left:12px;align-self:start;margin-top:0}
+#review-discreet .dw .label-mark{font:12px/1.5 system-ui;margin-left:6px;white-space:nowrap}
+#review-discreet .dw .receipt-signal{margin:0 20px 18px auto;padding:8px 12px;border:1px solid var(--dw-line);background:var(--dw-paper);max-width:240px}
+#review-discreet .dw .receipt-signal button{font-size:12px;padding:2px 6px}
+#review-discreet .dw .menu{margin:0 20px 20px;border:1px solid var(--dw-line);padding:12px;background:var(--dw-paper)}
+#review-discreet .dw .menu small{display:block;font-size:12px;color:var(--dw-muted);margin:6px 0}
+#review-discreet .dw .menu-actions{display:flex;flex-wrap:wrap;gap:4px 8px}
+#review-discreet .dw .menu-actions button{border:1px solid var(--dw-line);font-size:12px}
+#review-discreet .dw .help-copy{font-size:12px;color:var(--dw-muted);margin:14px 0 0}
+#review-discreet .dw .sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#review-discreet .dw [hidden]{display:none!important}
+#review-discreet .dw.narrow{max-width:350px}
+#review-discreet .dw.narrow article{padding:24px 20px}
+#review-discreet .dw.narrow .margin-layout{grid-template-columns:1fr;gap:4px}
+#review-discreet .dw.narrow .margin-signal{margin:-8px 0 18px}
+@media(max-width:500px){#review-discreet .viz-carousel>section{min-height:800px}#review-discreet .dw article{padding:24px 20px}#review-discreet .dw .margin-layout{grid-template-columns:1fr;gap:4px}#review-discreet .dw .margin-signal{margin:-8px 0 18px}}
+@media(pointer:coarse){#review-discreet .dw button{min-height:44px}}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('review-discreet');
+const stored=window.openai?.widgetState?.privateContent?.discreet||{};
+const sketches={};
+const mac=/Mac|iPhone|iPad/.test(navigator.platform);
+const modifier=mac?'Option':'Alt';
+const undoKey=mac?'Cmd+Z':'Ctrl+Z';
+const pendingHint='Hover the selection · scroll ← / →';
+const passage='<button type="button" class="selected cursor-interaction" aria-label="Select example passage">Keep local work available when saving fails.</button><span class="label-mark" hidden></span>';
+root.querySelectorAll('.dw').forEach((el,index)=>{
+ const name=el.parentElement.dataset.variant;
+ const old=stored[name];
+ const state={stage:['Reading','Selection','Labeled'].includes(old?.stage)?old.stage:'Selection',label:old?.label==='Left label'?'Left label':'Right label',narrow:!!old?.narrow};
+ const signal='<div class="signal local-signal" data-signal></div>';
+ const selectedParagraph=`<p>${passage} A failed export must leave the review open for retry.</p>`;
+ el.innerHTML=`<header><span class="filename">project-notes.md</span><button type="button" class="cursor-interaction" data-menu-toggle aria-expanded="false" aria-label="Review actions and shortcuts">•••</button><button type="button" class="done cursor-interaction" data-done>Done</button></header><article><div class="eyebrow">PROJECT NOTES / 03</div><h2>A reliable review flow</h2><p>The reader should always know what is selected and what has been labeled.</p>${index===2?`<div class="margin-layout"><div>${selectedParagraph}</div><aside class="signal margin-signal" data-signal></aside></div>`:selectedParagraph}${index===0?signal:''}<p>Give every annotation a stable identity, including passages that overlap.</p><pre class="code"><code>review.restore(savedAnnotations)</code></pre><p class="plain">The document remains read-only. Review changes belong to the annotations.</p></article>${index===1?'<div class="signal foot-signal" data-signal></div>':''}${index===4?'<div class="signal receipt-signal" data-signal></div>':''}<div class="menu" data-menu hidden><small>Label selected text</small><div class="menu-actions"><button type="button" class="cursor-interaction" data-label="Left label">← Left label</button><button type="button" class="cursor-interaction" data-label="Right label">Right label →</button></div><small>Review actions</small><div class="menu-actions"><button type="button" class="cursor-interaction" data-undo>Undo</button><button type="button" class="cursor-interaction" data-clear>Clear selection</button><button type="button" class="cursor-interaction" data-help>Help</button></div><p class="help-copy" data-help-copy hidden>Desktop: select text, hover the highlight, then scroll horizontally. ${modifier}+← / → assigns the left / right label. Escape clears the pending selection. ${undoKey} reverses the latest change. Mobile swipe behavior still needs native-device validation.</p></div><div class="sr" aria-live="polite" data-live></div>`;
+ function persist(){window.openai?.setWidgetState?.({modelContent:{designDirection:'Discreet swipe and keyboard first'},privateContent:{discreet:Object.fromEntries(Object.entries(sketches).map(([key,value])=>[key,value.state]))}})?.catch(()=>{});}
+ function render(){
+  el.dataset.stage=state.stage;
+  el.classList.toggle('narrow',state.narrow);
+  const selected=state.stage==='Selection';
+  const labeled=state.stage==='Labeled';
+  const message=labeled?`✓ ${state.label}`:selected?pendingHint:'';
+  el.querySelectorAll('[data-signal]').forEach(node=>{node.textContent=index===2&&selected?`← Left label\nRight label →`:message;node.hidden=index===4&&!selected&&!labeled;});
+  if(index===2){el.querySelector('[data-signal]').style.whiteSpace='pre-line';}
+  if(index===4&&labeled){
+   const node=el.querySelector('[data-signal]');
+   const undo=document.createElement('button');undo.type='button';undo.className='cursor-interaction';undo.textContent='Undo';undo.onclick=()=>transition('Selection');node.append(' · ',undo);
+  }
+  if(index===4&&selected)el.querySelector('[data-signal]').textContent='Scroll over the selection · ← / →';
+  const mark=el.querySelector('.label-mark');mark.textContent=state.label;mark.hidden=!(index===3&&labeled);
+  el.querySelector('[data-undo]').disabled=!labeled;
+  el.querySelector('[data-clear]').disabled=!selected;
+  el.querySelectorAll('[data-label]').forEach(b=>b.disabled=!selected);
+ }
+ function transition(stage,label){state.stage=stage;if(label)state.label=label;render();el.querySelector('[data-live]').textContent=stage==='Labeled'?`Assigned ${state.label}`:stage==='Selection'?'Selection pending':'Selection cleared';persist();}
+ const menu=el.querySelector('[data-menu]');
+ const toggle=el.querySelector('[data-menu-toggle]');
+ function closeMenu(){menu.hidden=true;toggle.setAttribute('aria-expanded','false');}
+ toggle.onclick=()=>{menu.hidden=!menu.hidden;toggle.setAttribute('aria-expanded',String(!menu.hidden));};
+ el.querySelectorAll('[data-label]').forEach(b=>b.onclick=()=>{transition('Labeled',b.dataset.label);closeMenu();toggle.focus();});
+ el.querySelector('[data-undo]').onclick=()=>transition('Selection');
+ el.querySelector('[data-clear]').onclick=()=>transition('Reading');
+ el.querySelector('[data-help]').onclick=()=>{const help=el.querySelector('[data-help-copy]');help.hidden=!help.hidden;};
+ el.querySelector('.selected').onclick=event=>{event.currentTarget.focus();transition('Selection');};
+ el.querySelector('[data-done]').onclick=()=>{menu.hidden=false;toggle.setAttribute('aria-expanded','true');const help=el.querySelector('[data-help-copy]');help.hidden=false;help.textContent=state.stage==='Selection'?'Label or clear the pending selection before finishing.':'Preview only · the host would save the completed review here.';};
+ el.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){event.preventDefault();if(!menu.hidden){closeMenu();toggle.focus();}else if(state.stage==='Selection')transition('Reading');return;}
+  if(!menu.hidden)return;
+  if(event.altKey&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&state.stage==='Selection'&&['ArrowLeft','ArrowRight'].includes(event.key)){event.preventDefault();transition('Labeled',event.key==='ArrowLeft'?'Left label':'Right label');}
+  if((mac?event.metaKey:event.ctrlKey)&&!event.shiftKey&&event.key.toLowerCase()==='z'&&state.stage==='Labeled'){event.preventDefault();transition('Selection');}
+ });
+ sketches[name]={state,render};render();
+ if(globalThis.Tweak){const tweak=new Tweak({container:el,onChange:()=>{render();persist();}});tweak.addSelect(state,'stage',{label:'Preview interaction state',options:['Reading','Selection','Labeled']});tweak.addToggle(state,'narrow',{label:'Narrow layout'});}
+});
+window.addEventListener('openai:set_globals',event=>{
+ const incoming=event.detail?.globals?.widgetState?.privateContent?.discreet;
+ if(!incoming)return;
+ Object.entries(sketches).forEach(([key,sketch])=>{const next=incoming[key];if(!next)return;if(['Reading','Selection','Labeled'].includes(next.stage))sketch.state.stage=next.stage;if(['Left label','Right label'].includes(next.label))sketch.state.label=next.label;sketch.state.narrow=!!next.narrow;sketch.render();});
+});
+})();
+</script>

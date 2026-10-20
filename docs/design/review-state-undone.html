@@ -1,0 +1,171 @@
+<div id="review-state-undone" aria-label="Inline whisper flow study">
+<div class="state-previews viz-dotted-background" aria-label="All proposed whisper states shown together">
+
+
+
+
+<section data-variant="After undo"><h3>After Undo — selection cleared</h3><div class="wf" aria-label="After an annotation was undone"></div></section>
+
+
+</div>
+</div>
+<style>
+#review-state-undone{color-scheme:light dark}
+#review-state-undone .state-previews>section{padding:20px 8px 32px;box-sizing:border-box}
+#review-state-undone .state-previews>section>h3{max-width:700px;margin:0 auto 12px}
+#review-state-undone .wf{--wf-paper:light-dark(#fff,#222);--wf-ink:light-dark(#252525,#eee);--wf-muted:light-dark(#626262,#bcbcbc);--wf-line:light-dark(#d5d5d5,#575757);--wf-soft:light-dark(#f3f3f3,#303030);--wf-selection:light-dark(#e5e5e5,#454545);background:var(--wf-paper);color:var(--wf-ink);border:1px solid var(--wf-line);border-radius:5px;font:14px/1.65 system-ui,sans-serif;max-width:700px;margin:auto;overflow-wrap:anywhere}
+#review-state-undone .wf *{box-sizing:border-box}
+#review-state-undone .wf button{background:transparent;color:var(--wf-ink);font:inherit;border:0;border-radius:3px;padding:7px 9px;min-height:36px}
+#review-state-undone .wf button:disabled{opacity:.4}
+#review-state-undone .wf header{border-bottom:1px solid var(--wf-line)}
+#review-state-undone .wf .navline{display:flex;gap:10px;align-items:center;padding:11px 18px;flex-wrap:wrap;min-height:62px}
+#review-state-undone .wf .filename{font-size:12px;color:var(--wf-muted);flex:1;min-width:130px}
+#review-state-undone .wf .toggle{margin-left:auto}
+#review-state-undone .wf .done{border:1px solid var(--wf-line);font-size:12px}
+#review-state-undone .wf .commands{display:flex;gap:5px 10px;flex-wrap:wrap;align-items:center;flex:1;min-width:0}
+#review-state-undone .wf .commands button{font-size:12px}
+#review-state-undone .wf .commands .label-command{border:1px solid var(--wf-line)}
+#review-state-undone .wf .help{font-size:12px;color:var(--wf-muted);margin:0;padding:12px 18px;border-top:1px solid var(--wf-line);background:var(--wf-soft)}
+#review-state-undone .wf article{padding:30px 38px 22px}
+#review-state-undone .wf .eyebrow{font-size:12px;color:var(--wf-muted);letter-spacing:.05em}
+#review-state-undone .wf h2{font:500 25px/1.3 system-ui;margin:9px 0 23px}
+#review-state-undone .wf p{margin:0 0 22px}
+#review-state-undone .wf .passage{display:inline;font:inherit;text-align:left;padding:1px 0;min-height:0;border-radius:0;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+#review-state-undone .wf .passage.pending{background:var(--wf-selection);border-bottom:1px solid var(--wf-ink)}
+#review-state-undone .wf .passage.committed{background:var(--wf-soft);border-bottom:2px solid var(--wf-ink)}
+#review-state-undone .wf .passage.editing{outline:1px solid var(--wf-line);outline-offset:3px}
+#review-state-undone .wf .whisper{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px;font:12px/1.65 system-ui;color:var(--wf-muted);margin:-11px 0 24px;min-height:24px}
+#review-state-undone .wf .whisper-status{font-weight:400;text-align:center;white-space:nowrap}
+#review-state-undone .wf .end{min-width:0;overflow-wrap:anywhere}
+#review-state-undone .wf .end:last-child{text-align:right}
+#review-state-undone .wf .active{text-decoration:underline;text-underline-offset:4px;color:var(--wf-ink)}
+#review-state-undone .wf .code{white-space:pre-wrap;padding:12px;background:var(--wf-soft);font:12px/1.7 ui-monospace,monospace;margin:0 0 22px}
+#review-state-undone .wf .note{font-size:12px;color:var(--wf-muted)}
+#review-state-undone .wf [hidden]{display:none!important}
+#review-state-undone .wf.narrow{max-width:350px}
+#review-state-undone .wf.narrow article{padding:25px 20px}
+#review-state-undone .wf.narrow .commands{flex-basis:100%;order:3}
+#review-state-undone .wf.narrow .whisper{align-items:start}
+@media(max-width:500px){#review-state-undone .viz-carousel>section{min-height:1020px}#review-state-undone .wf article{padding:25px 20px}#review-state-undone .wf .commands{flex-basis:100%;order:3}}
+@media(pointer:coarse){#review-state-undone .wf button{min-height:44px}}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('review-state-undone');
+const mac=/Mac|iPhone|iPad/.test(navigator.platform);
+const shortcut=mac?'Option':'Alt';const undoKey=mac?'Cmd+Z':'Ctrl+Z';
+const presets={Application:{a:'Accept',b:'Reject'},Research:{a:'Evidence',b:'Question'},Long:{a:'Needs source verification',b:'Ready for publication'}};
+const saved=window.openai?.widgetState?.privateContent?.reviewStateUndone;
+const scenes=['Reading','Pending','Precise selection','Just labeled','Editing saved','After undo','Toolbar open'];
+const views={};
+function persist(){window.openai?.setWidgetState?.({modelContent:{design:'Toolbar swap and state-led whisper'},privateContent:{reviewStateUndone:Object.fromEntries(Object.entries(views).map(([name,v])=>[name,v.capture()]))}})?.catch(()=>{});}
+function createPreview(initial){
+ let data=structuredClone(initial),past=[],future=[];
+ return {
+  read:()=>data,
+  replace(next){data=structuredClone(next);past=[];future=[];},
+  change(next){past.push(structuredClone(data.labels));future=[];data.labels=next;data.pending=null;data.active=null;data.precise=false;},
+  undo(){if(!past.length)return false;future.push(structuredClone(data.labels));data.labels=past.pop();data.pending=null;data.active=null;data.precise=false;return true;},
+  redo(){if(!future.length)return false;past.push(structuredClone(data.labels));data.labels=future.pop();data.pending=null;data.active=null;data.precise=false;return true;},
+  canUndo:()=>past.length>0,canRedo:()=>future.length>0,
+  snapshot:()=>structuredClone({data,past,future}),
+  restore(snapshot){data=structuredClone(snapshot.data);past=structuredClone(snapshot.past);future=structuredClone(snapshot.future);}
+ };
+}
+root.querySelectorAll('.wf').forEach((el,index)=>{
+ const name=el.parentElement.dataset.variant;
+ const prior=saved?.[name];
+ const initialScenes={'Pending selection':'Pending','Reading':'Reading','Precise keyboard selection':'Precise selection','Editing saved annotation':'Editing saved','After undo':'After undo','Toolbar expanded':'Toolbar open','Multiline and long labels':'Pending'};
+ const isStress=name==='Multiline and long labels';
+ const options={scene:scenes.includes(prior?.scene)?prior.scene:initialScenes[name],labels:Object.hasOwn(presets,prior?.labels)?prior.labels:isStress?'Long':'Application',narrow:prior?.narrow??isStress};
+ let renderedScene=options.scene;
+ const session=createPreview({labels:{},pending:null,active:null,precise:false});
+ let expanded=false,receipt=null,notice='',anchor='one';
+ el.innerHTML=`<header><div class="navline"><span class="filename">project-notes.md</span><div class="commands" id="wf-controls-${index}" hidden><button type="button" class="label-command cursor-interaction" data-assign="a"></button><button type="button" class="label-command cursor-interaction" data-assign="b"></button><button type="button" class="cursor-interaction" data-action="undo">Undo</button><button type="button" class="cursor-interaction" data-action="redo">Redo</button><button type="button" class="cursor-interaction" data-action="clear">Clear</button><button type="button" class="cursor-interaction" data-action="annotations">Annotations</button><button type="button" class="cursor-interaction" data-action="export">Export</button><button type="button" class="cursor-interaction" data-action="help">Help</button></div><button type="button" class="toggle cursor-interaction" aria-label="Expand or collapse review controls" aria-controls="wf-controls-${index}" aria-expanded="false">•••</button><button type="button" class="done cursor-interaction">Done</button></div><p class="help" hidden></p></header><article><div class="eyebrow">PROJECT NOTES / 03</div><h2>A reliable review flow</h2><p>The reader should always know what is selected and what has been labeled.</p><p data-paragraph="one"><button type="button" class="passage cursor-interaction" data-passage="one">Keep local work available when saving fails. A failed export must leave the review open for retry.</button></p><div class="whisper"><span class="end" data-end="a"></span><span class="whisper-status"></span><span class="end" data-end="b"></span></div><p data-paragraph="two"><button type="button" class="passage cursor-interaction" data-passage="two">Give every annotation a stable identity, including passages that overlap.</button></p><pre class="code"><code>review.restore(savedAnnotations)</code></pre><p class="note">Every annotation remains independently editable.</p></article>`;
+ const toggle=el.querySelector('.toggle'),panel=el.querySelector('.commands'),help=el.querySelector('.help'),whisper=el.querySelector('.whisper');
+ const live=el.querySelector('.whisper-status');live.setAttribute('role','status');live.setAttribute('aria-live','polite');
+ function announce(message){if(live.textContent!==message)live.textContent=message;}
+ function render(){
+  const data=session.read(),labels=presets[options.labels],target=data.pending||data.active;
+  const marked=data.active||receipt;
+  const assigned=marked?data.labels[marked]:null;
+  el.classList.toggle('narrow',options.narrow);
+  panel.hidden=!expanded;toggle.setAttribute('aria-expanded',String(expanded));el.querySelector('.filename').hidden=expanded;
+  el.querySelector(`[data-paragraph="${anchor}"]`).after(whisper);
+  el.querySelectorAll('[data-passage]').forEach(button=>{
+   const id=button.dataset.passage;button.classList.toggle('pending',data.pending===id);button.classList.toggle('committed',!!data.labels[id]);button.classList.toggle('editing',data.active===id);
+   button.setAttribute('aria-label',data.labels[id]?`Edit annotation: ${labels[data.labels[id]]}`:'Select passage');
+  });
+  let message='Select text to label';
+  const compact=options.narrow||window.matchMedia('(max-width:500px)').matches;
+  if(data.precise)message=compact?'Selecting · F2 to finish':'Selecting text · F2 to finish';
+  else if(data.pending)message=expanded?'Unlabeled · choose above':compact?'Unlabeled':'Unlabeled · scroll over selection ↔';
+  else if(data.active)message=compact?'Editing':'Labeled · ••• to edit';
+  else if(receipt)message=`Labeled · ${undoKey} undo`;
+  else if(notice)message=compact?(notice.startsWith('Annotation redone')?'Redone':'Undone'):notice;
+  announce(message);
+  ['a','b'].forEach(id=>{
+   const word=(assigned===id?'✓ ':'')+labels[id];
+   const end=el.querySelector(`[data-end="${id}"]`);end.textContent=id==='a'?`← ${word}`:`${word} →`;end.classList.toggle('active',assigned===id);
+   const button=el.querySelector(`[data-assign="${id}"]`);button.textContent=id==='a'?`← ${labels[id]}`:`${labels[id]} →`;button.disabled=!target||data.precise;
+  });
+  el.querySelector('[data-action="undo"]').disabled=!session.canUndo();el.querySelector('[data-action="redo"]').disabled=!session.canRedo();el.querySelector('[data-action="clear"]').disabled=!target;
+  whisper.setAttribute('aria-label',`${message}. Left label ${labels.a}. Right label ${labels.b}.${assigned?' Assigned '+labels[assigned]+'.':''}`);
+ }
+ function resetScene(){
+  renderedScene=options.scene;
+  session.replace({labels:{},pending:null,active:null,precise:false});expanded=false;receipt=null;notice='';anchor='one';help.hidden=true;
+  const data=session.read();
+  if(['Pending','Precise selection','Toolbar open'].includes(options.scene))data.pending='one';
+  if(options.scene==='Precise selection')data.precise=true;
+  if(['Just labeled','Editing saved','After undo'].includes(options.scene)){session.change({one:'a'});if(options.scene==='Just labeled')receipt='one';if(options.scene==='Editing saved')data.active='one';if(options.scene==='After undo'){session.undo();notice='Annotation undone · select text';}}
+  expanded=options.scene==='Toolbar open';render();
+ }
+ function classify(id){const data=session.read();const target=data.pending||data.active;if(!target||data.precise)return;session.change({...data.labels,[target]:id});receipt=target;anchor=target;notice='';help.hidden=true;render();persist();}
+ function history(direction){const done=session[direction]();if(!done)return;receipt=null;notice=direction==='undo'?'Annotation undone · select text':'Annotation redone · select text';render();persist();}
+ el.querySelectorAll('[data-passage]').forEach(button=>button.onclick=()=>{
+  button.focus();const data=session.read(),id=button.dataset.passage;
+  data.pending=data.labels[id]?null:id;data.active=data.labels[id]?id:null;data.precise=false;anchor=id;receipt=null;notice='';help.hidden=true;render();persist();
+ });
+ toggle.onclick=()=>{expanded=!expanded;if(!expanded){help.hidden=true;toggle.focus();}render();persist();};
+ el.querySelectorAll('[data-assign]').forEach(b=>b.onclick=()=>classify(b.dataset.assign));
+ el.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>{
+  const data=session.read();
+  if(b.dataset.action==='undo')return history('undo');
+  if(b.dataset.action==='redo')return history('redo');
+  if(b.dataset.action==='clear'){data.pending=null;data.active=null;data.precise=false;receipt=null;notice='';render();persist();return;}
+  help.hidden=false;
+  if(b.dataset.action==='annotations')help.textContent=Object.keys(data.labels).length?Object.entries(data.labels).map(([id,label])=>`Passage ${id}: ${presets[options.labels][label]}`).join(' · '):'No committed annotations.';
+  if(b.dataset.action==='export')help.textContent='Preview only · export includes committed annotations; pending text stays selected.';
+  if(b.dataset.action==='help')help.textContent=`Select a passage, then hover its highlight and scroll horizontally to label (proposed behavior). ${shortcut}+Left / Right labels pending text or edits the active annotation. F2 finishes precise selection. ${undoKey} reverses history and clears the target. Open ••• for mouse-accessible controls.`;
+ });
+ el.querySelector('.done').onclick=()=>{expanded=true;help.hidden=false;help.textContent=session.read().pending?'Label or clear the pending text before finishing.':'Preview only · host save would run here; no file has been saved.';render();};
+ el.addEventListener('keydown',event=>{
+  const data=session.read();
+  if(event.key==='Escape'){event.preventDefault();if(expanded){expanded=false;help.hidden=true;toggle.focus();}else{data.pending=null;data.active=null;data.precise=false;receipt=null;notice='';}render();persist();return;}
+  if(event.key==='F2'){event.preventDefault();if(data.pending)data.precise=!data.precise;render();persist();return;}
+  if((mac?event.metaKey:event.ctrlKey)&&!event.altKey&&event.key.toLowerCase()==='z'){event.preventDefault();history(event.shiftKey?'redo':'undo');return;}
+  if(data.precise)return;
+  if(event.altKey&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&['ArrowLeft','ArrowRight'].includes(event.key)){if(data.pending||data.active){event.preventDefault();classify(event.key==='ArrowLeft'?'a':'b');}}
+ });
+ function capture(){return {...options,session:session.snapshot(),expanded,receipt,notice,anchor};}
+ function restore(snapshot){
+  renderedScene=options.scene;
+  if(!snapshot.session){resetScene();return;}
+  session.restore(snapshot.session);expanded=!!snapshot.expanded;receipt=['one','two'].includes(snapshot.receipt)?snapshot.receipt:null;notice=typeof snapshot.notice==='string'?snapshot.notice:'';anchor=snapshot.anchor==='two'?'two':'one';render();
+ }
+ views[name]={options,resetScene,render,capture,restore};resetScene();if(prior?.session)restore(prior);
+ if(globalThis.Tweak){const tweak=new Tweak({container:el,onChange:()=>{if(options.scene!==renderedScene)resetScene();else render();persist();}});tweak.addSelect(options,'scene',{label:'Flow state',options:scenes});tweak.addSelect(options,'labels',{label:'Host label values',options:Object.keys(presets)});tweak.addToggle(options,'narrow',{label:'Narrow layout'});}
+});
+window.addEventListener('openai:set_globals',event=>{
+ const incoming=event.detail?.globals?.widgetState?.privateContent?.reviewStateUndone;if(!incoming)return;
+ Object.entries(views).forEach(([name,v])=>{const next=incoming[name];if(!next)return;if(scenes.includes(next.scene))v.options.scene=next.scene;if(Object.hasOwn(presets,next.labels))v.options.labels=next.labels;if(typeof next.narrow==='boolean')v.options.narrow=next.narrow;v.restore(next);});
+});
+window.addEventListener('resize',()=>Object.values(views).forEach(v=>v.render()));
+// These are local storyboard transitions, not native Range/Selection or gesture handling.
+const proof=createPreview({labels:{},pending:'one',active:null,precise:false});
+proof.change({one:'a'});console.assert(proof.read().pending===null&&proof.read().active===null,'Commit clears targets');
+proof.undo();console.assert(proof.read().pending===null&&Object.keys(proof.read().labels).length===0,'Undo does not recreate pending text');
+proof.redo();console.assert(proof.read().pending===null&&proof.read().labels.one==='a','Redo restores annotation only');
+})();
+</script>

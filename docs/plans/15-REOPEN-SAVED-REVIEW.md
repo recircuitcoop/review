@@ -1,6 +1,6 @@
 # 15 — Reopen a saved review
 
-Status: pending. Depends on: 09, 14. Reuses existing validated restore and editing commands.
+Status: implemented and locally verified; expanded cross-platform and updated-download acceptance is pending. Depends on: 09, 14. Reuses existing validated restore and editing commands.
 Seed: [reopen a saved review](../../selection-swipe-library.md#reopen-a-saved-review). Contract: [saved-review opening](../IMPLEMENTATION.md#reopen-a-saved-review).
 
 ## Outcome
@@ -25,8 +25,10 @@ Restored annotations retain IDs, labels, quotes, positions, and overlaps and bec
 
 ## Done
 
-- [ ] Focused host-flow tests fail before implementation and pass using the existing restore model.
+- [x] Focused host-flow tests fail before implementation and pass using the existing restore model.
 - [ ] Reopen → edit → export → reopen works with grouped and split input; rebuilt offline app and usage docs match.
-- [ ] Verification records actual results and outstanding platform gaps.
+- [x] Verification records actual results and outstanding platform gaps.
 
 Implementation detail: a separate “Open saved review” form is available before any review starts. Candidate parsing, SHA-256 source matching, mount and restore run before the replacement confirmation. Confirmation cancellation destroys only the detached candidate. Loading controls preserve the current pending range; both load buttons are disabled during reads to prevent out-of-order replacement. Labels are populated from saved metadata after a successful swap.
+
+Local evidence: the 9-check host page passes in Chromium and Safari on macOS, including grouped/split reopening, saved labels/IDs, a fresh undo baseline, edits/reopen, pending preservation, canceled replacement and invalid-input rollback. `tests/host.spec.js` adds actual updated-download round trips for grouped and split input; those new CI cases remain unrun.

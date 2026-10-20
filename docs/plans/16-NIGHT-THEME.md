@@ -1,6 +1,6 @@
 # 16 — Night theme
 
-Status: pending. Depends on: 02, 05. Presentation only; include in release gate 13.
+Status: implemented and locally verified; expanded CI and native accessibility verification are pending. Depends on: 02, 05. Presentation only; include in release gate 13.
 Seed: [night theme](../../selection-swipe-library.md#night-theme). Contract: [theme behavior](../IMPLEMENTATION.md#night-theme).
 
 ## Outcome
@@ -24,6 +24,10 @@ Theme changes preserve pending/native selection, saved annotations, IDs, offsets
 
 ## Done
 
-- [ ] Focused preference/state and browser checks pass; all surfaces use theme-aware colors.
+- [x] Focused preference/state and browser checks pass; all surfaces use theme-aware colors.
 - [ ] Keyboard/screen-reader state and contrast are verified; offline app rebuilt.
-- [ ] Usage docs and verification record distinguish completed checks from platform gaps.
+- [x] Usage docs and verification record distinguish completed checks from platform gaps.
+
+Implementation detail: store `light`/`dark` under `review-theme`; an invalid or unavailable preference follows the system until the user clicks the native “Night theme” pressed-state button. Theme pointer interaction retains document focus/selection. Shared `--review-*` variables cover all colors; custom highlights retain light fallbacks for embedding without the stylesheet. Numeric WCAG contrast checks cover normal text (4.5:1), boundaries and focus (3:1), supplemented by real-browser state/presentation checks.
+
+Local evidence: 21 Node tests pass, including system/manual preference handling, restricted storage and numeric text/highlight/control/focus contrast. The 9-check host page passes in Chromium and Safari with theme changes preserving selections, open dialogs, focus, history and exports. Playwright system-emulation, native keyboard-toggle and storage-denial cases are written but have not run in CI.

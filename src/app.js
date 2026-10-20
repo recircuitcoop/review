@@ -1,5 +1,8 @@
+import { initializeTheme } from './theme.js';
 import { mountReview } from './review.js';
 import { exportFiles, readDocument, savedReviewOptions } from './files.js';
+
+initializeTheme(document.querySelector('#theme-toggle'));
 
 const form = document.querySelector('#setup');
 const container = document.querySelector('#annotator');

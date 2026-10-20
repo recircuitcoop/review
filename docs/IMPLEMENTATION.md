@@ -14,7 +14,7 @@ Examples: `notes.md` + `Accept` / `Reject` → `notes_Accept.json` / `notes_Reje
 
 Prepare both payloads and object URLs before offering split delivery. Each file needs a clearly named, independent user-activated download/retry control; completion must not depend on browsers permitting multiple automatic clicks in one handler. Keep both available until the review changes or the user leaves. Use “files ready” rather than claiming disk-save success. Export files, Done, and their shortcuts share this host path. Grouped export continues to produce one file.
 
-Implementation status: the serializer produces two payloads, but the current host automatically clicks both anchors in one handler and names files with direction IDs. The user reports only the right file arriving. Reliable split delivery and the label-based names above are **not implemented yet**; [plan 14](plans/14-SPLIT-EXPORT-DELIVERY.md) owns the fix and actual-download regression proof.
+Implementation status: the host now prepares both named files and offers independent download controls without automatic clicks. Both actual downloads, filenames and payloads passed the initial nine-job CI matrix; see [plan 14](plans/14-SPLIT-EXPORT-DELIVERY.md).
 
 ## Reopen a saved review
 
@@ -24,15 +24,15 @@ Do not infer an empty label from a missing split file. Present a useful request 
 
 After reopening, preserve annotation IDs, labels, exact anchors, and overlaps. Restored annotations form a fresh history baseline; subsequent creation, relabeling, and deletion use the same commands/history as a new review. Re-export includes the entire current committed state, including unchanged annotations, in the selected grouped/split format and with plan 14's label-based filenames. File contents stay local.
 
-Current status: the library and the application's manual “start review, then restore” path already exist. The guided opening flow, automatic configuration from saved metadata, and its full reopen/edit/download tests are pending in [plan 15](plans/15-REOPEN-SAVED-REVIEW.md). Reuse the existing JSON schema and restore validation; no new persistence service or format is required.
+Current status: the guided opening flow is implemented using the existing JSON schema and restore validation. Local grouped/split reopen/edit/rollback checks pass. New actual updated-download CI cases await publication and execution; see [plan 15](plans/15-REOPEN-SAVED-REVIEW.md).
 
 ## Night theme
 
-Planned in [plan 16](plans/16-NIGHT-THEME.md). A host-owned light/night toggle follows `prefers-color-scheme` until an explicit local preference exists. Store only `light` or `dark` under a theme-specific preference key; wrap preference reads/writes so restricted storage on offline file origins cannot break review. Without persisted state, retain the chosen appearance for the current page. Observe system changes while the user has not overridden them.
+Implemented locally under [plan 16](plans/16-NIGHT-THEME.md); expanded CI/native accessibility verification remains pending. A host-owned light/night toggle follows `prefers-color-scheme` until an explicit local preference exists. Store only `light` or `dark` under a `review-theme` preference key; wrap preference reads/writes so restricted storage on offline file origins cannot break review. Without persisted state, retain the chosen appearance for the current page. Observe system changes while the user has not overridden them.
 
 Use CSS color variables for both host UI and the embedded library. Existing custom-highlight rules in `src/review.js` must consume those variables instead of their fixed colors. Include left/right, pending, active, and native selection colors plus readable code blocks, dialogs, previews, controls, and focus rings. Set the appropriate `color-scheme` so native form controls match. The embedded library inherits the host's variables without adding a public theme configuration API.
 
-Switch appearance in place. Do not replace document nodes, remount, clear selection/history, alter canonical text, or change exported annotation data. Verify WCAG AA text/control contrast and non-color state cues. This is a pending feature; the current application has light styling only.
+Switch appearance in place. Do not replace document nodes, remount, clear selection/history, alter canonical text, or change exported annotation data. Verify WCAG AA text/control contrast and non-color state cues. Both palettes and preference handling are implemented; local contrast/state checks pass. This does not claim a native screen-reader pass.
 
 ## Dependency and browser decision
 
@@ -56,7 +56,7 @@ Swipe requires a separate gesture beginning on a pending highlight. Commit at ho
 
 ## Public API and events
 
-`mountReview(container, {document: {id, version, markdown}, labels: [{id, name, direction}], shortcuts?, exportFormat?, onFinish?})` returns `select(start,end)`, `clear()`, `activate(id)`, `relabel(id,labelId)`, `delete(id)`, `read()`, `restore(payloadOrSplitPayloadArray)`, `undo()`, `redo()`, `export(format?)`, `finish()`, `destroy()`, and `shortcuts` (a copy of effective mappings). Invalid input throws a useful error; UI commands announce errors and dispatch `review:error`.
+`mountReview(container, {document: {id, version, markdown}, labels: [{id, name, direction}], shortcuts?, styles?, exportFormat?, onFinish?})` returns `select(start,end)`, `clear()`, `activate(id)`, `relabel(id,labelId)`, `delete(id)`, `read()`, `restore(payloadOrSplitPayloadArray)`, `undo()`, `redo()`, `export(format?)`, `finish()`, `destroy()`, and `shortcuts` (a copy of effective mappings). Invalid input throws a useful error; UI commands announce errors and dispatch `review:error`.
 
 Container events `review:create`, `review:update`, `review:delete`, and `review:selection` carry copied annotation/range data; `review:complete` carries exported data after a successful `onFinish(data)` promise. No promise rejection clears state or completes the session. Finish with pending text opens a label/discard dialog; dismissing it cancels completion. Destruction is idempotent, restores original container nodes, and removes owned listeners/highlights/UI. Mutations after destruction throw. Mounted instances use distinct highlight names and scoped commands.
 
@@ -76,3 +76,15 @@ Both label groups exist, including empty ones. Sort by start, end, then ID. Spli
 
 `npm run build`: the standalone offline app `dist/review.html`, self-contained ESM library `dist/review-lib.js`, and `dist/review.css`.
 `npm run test:page`: a self-contained real-browser check page, useful when the environment blocks headless Chromium. See [actual verification results](VERIFICATION.md); this alternative does not claim OS input coverage.
+
+## Displayed shortcut names
+
+Visible shortcut hints and help expand the host's abstract `Mod` binding to **Cmd** on macOS or **Ctrl** on Windows/Linux. Explicit `Meta` overrides display as Cmd on macOS. Internal binding configuration and the `shortcuts` API still accept/return `Mod`; ARIA uses the standard `Meta`/`Control` names. Users must never be asked to find a keyboard key named Mod.
+
+## Planned native-scroll and mobile interaction follow-up
+
+The present pointer implementation remains a prototype. Plans [17](plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md)–[20](plans/20-INPUT-UX-ACCEPTANCE.md) document the user-requested correction: desktop hover over pending text plus native horizontal scrolling; no dragged-text/handle requirement, no custom diagonal classifier, no vertical-to-horizontal conversion, no native scrolling/zoom/navigation suppression. Observe actual browser input/default behavior before selecting the minimum action and duplicate guard. Existing release-displacement thresholds apply only to the old pointer path. Mobile native text selection and touch classification need a separate prototype and actual iOS/Android proof. No public label/export/restore schema or setup UI is added by this planning work.
+
+### Instance appearance
+
+`mountReview(..., { styles })` takes partial named CSS values and exports `defaultReviewStyles` for inspection. Background and all visual token families use the approved defaults when omitted. Values are copied to the mounted root, including dialogs and highlights, without changing host-page styles or annotation data. Invalid maps/values reject before replacing host content. See [Styling](STYLING.md) for supported tokens and defaults.

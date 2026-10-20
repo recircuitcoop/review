@@ -46,6 +46,20 @@ After a successful swipe, the library commits the annotation, colors the passage
 
 Visible label buttons and keyboard actions provide equivalent classification without swiping. Undo reverses the latest committed annotation action.
 
+### Planned desktop and mobile interaction correction
+
+The user has requested a UX correction after finding desktop “swiping” unclear. The preferred desktop flow is **select a passage → hover its pending highlight → scroll left/right using the device's native horizontal scrolling → assign that configured label**. Do not require dragging selected text or a desktop drag handle. Do not implement custom diagonal/axis-ratio recognition, convert vertical scrolling into labels, or suppress native scrolling, zoom or browser navigation. Ordinary mice without horizontal input retain the label buttons and keyboard alternatives. Only a pending selection can be labeled this way; saved text is not implicitly relabeled by scrolling.
+
+Joint UX-expert and senior frontend review is recorded in [17 — Native-scroll UX prototype](docs/plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md). This is a planned correction, not implemented or validated behavior. Prototype native input and discoverability before implementing [18 — Desktop hover/scroll labeling](docs/plans/18-DESKTOP-HOVER-SCROLL-LABELING.md); do not inherit the old pointer prototype's displacement/slope rules or invent gesture-end timing in advance.
+
+The separately requested mobile flow must preserve native long press, selection handles, vertical scrolling, pinch zoom and browser navigation. Its horizontal touch action needs its own prototype/capability decision and physical-device proof under [19 — Mobile selection and swipe](docs/plans/19-MOBILE-NATIVE-SELECTION-AND-SWIPE.md) and [20 — Input UX acceptance](docs/plans/20-INPUT-UX-ACCEPTANCE.md). Desktop wheel tests do not establish mobile support. Labels, document identity, export format and restored data remain configured through the existing host API; setup/file forms do not enter the mounted widget.
+
+### Planned widget presentation
+
+The approved high-fidelity appearance is the default styling contract. Hosts configure colours (including the widget background), buttons, typography, spacing, borders and other named style tokens once through `mountReview(..., { styles })`. Omitted values use the exported, immutable `defaultReviewStyles`. Configuration is scoped to each mounted widget and does not change host-page styles, annotation data or other instances. See [24 — Instance style configuration](docs/plans/24-INSTANCE-STYLE-CONFIGURATION.md). Styling changes do not imply the new native-input gates have passed.
+
+The user selected **Inline whisper** for visual refinement: a discreet status attached to the passage explicitly shows `Selected · Not labeled yet` before classification and `Labeled · {actual configured label name}` afterward. Direction hints show both real label names, not generic left/right placeholders, and refresh from accepted host configuration changes. Swipe and keyboard remain primary; secondary controls expand inside the top navigation bar through ••• and collapse through that same button. Three top-bar patterns remain under discussion in [21 — Library widget design](docs/plans/21-LIBRARY-WIDGET-DESIGN.md), before high fidelity and implementation. No setup forms are introduced. Supporting live label-name updates requires a specified host update path that preserves stable identities; current reset/restore safeguards remain in force until that work is implemented.
+
 ### Capabilities and keyboard shortcuts — initial release
 
 All shortcuts below ship in the initial release. “Mod” means Command on macOS and Ctrl on Windows/Linux. Shortcuts apply only while focus is within the annotator. Every command also has a visible control or an entry in the keyboard-accessible annotation toolbar.
@@ -67,7 +81,6 @@ All shortcuts below ship in the initial release. “Mod” means Command on macO
 | Choose among overlapping saved annotations | ArrowUp / ArrowDown, then Enter | Move through the open overlap chooser and activate one annotation. Escape closes the chooser without a change. |
 | Undo | Mod+Z | Reverse the latest committed creation, relabeling, or deletion. Cancel any pending selection first, then undo. |
 | Redo | Mod+Shift+Z; Ctrl+Y on Windows/Linux | Reapply an undone committed change. Cancel any pending selection first, then redo. |
-| Export without finishing | Mod+Shift+E | Request an export of committed annotations in the session’s selected grouped or split format; keep the session open. Pending text is excluded and stays selected. |
 | Finish / Done | Mod+Enter | Run the same completion flow as the Done button, including resolution of pending selections. |
 | Show shortcut help | F1 | Open the capability and shortcut reference within the annotator. Escape closes it. |
 
@@ -82,6 +95,8 @@ Do not intercept shortcuts in editable fields, host application controls, or dur
 ### Finish
 
 Done completes the session and produces the export payload. If a selection is still pending, the interface asks the user to label it or discard it before completion. A completed session may contain zero annotations.
+
+The mounted interface has no separate Export button or standalone export shortcut. Done automatically invokes the configured export/completion flow through the host. Keep the session available for retry if delivery fails. The library's programmatic export API remains available to hosts. This presentation correction is specified in plan 22; the existing production shortcut implementation is not changed by the lo-fi work.
 
 The host application decides how to present downloads or save the returned data. Finishing must not silently lose annotations if saving fails; the current session remains available for retry.
 
@@ -161,7 +176,7 @@ Maintain only one pending selection at a time. A selection must be nonempty and 
 
 A gesture beginning without an active selection can establish a range but cannot label it in the same gesture. A subsequent gesture beginning on the active highlight can become a swipe. Vertical movement preserves normal scrolling; horizontal movement must exceed a documented distance and direction threshold to commit. Pointer cancellation must never commit an annotation.
 
-Exact gesture thresholds are implementation tuning values to validate in the prototype. Their purpose is to prevent accidental labeling while preserving responsive interaction.
+Exact pointer-gesture thresholds are implementation tuning values for the original prototype. They do not define the planned native horizontal-scroll desktop interaction; plans 17–20 supersede the affected input UX only after their gates pass. Selection alone remains uncommitted, and all classification continues through one shared command.
 
 ### Annotation identity and anchoring
 

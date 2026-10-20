@@ -2,21 +2,29 @@
 
 Date: 2026-10-19. The records below describe observed checks; they do not establish that all release requirements are complete.
 
+## New swipe UX planning (2026-10-20)
+
+The user clarified that desktop swiping is undiscoverable and rejected a desktop dragged-text/handle proposal. The preferred prototype is hover over pending selected text plus native horizontal scrolling, letting OS/browser scrolling remain native and adding no custom diagonal classifier. Joint UX-expert/senior-frontend source review informed [plans 17–20](plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md). They are **planned only**: no gesture implementation, new device tests or user study was performed. Mobile remains unverified. Plan 07's old pointer proof does not establish the new desktop UX or mobile acceptance; 13's desktop interaction gate remains open.
+
+## Current status after GitHub connection
+
+Public repository: [recircuitcoop/review](https://github.com/recircuitcoop/review). The user pushed `df33471`; authenticated GitHub browser access published the file-opening fix `634796e` and rebuilt offline bundle `e828842`. [CI run 3](https://github.com/recircuitcoop/review/actions/runs/39318606377) **passed all nine jobs** on Windows/Linux/macOS × Chromium/Firefox/WebKit. Each job passed 17 Node tests, the build and the initial 10 browser tests, including two actual label downloads and restore. Playwright 1.58.2 pins Chromium 145.0.7632.6, Firefox 146.0.1 and WebKit 26.0; these are the package download manifest versions, not a claim that Safari itself ran on Windows/Linux.
+
+Later local implementation includes night theme and concrete Cmd/Ctrl display names. The latest recorded local results are **21 Node tests**, **31 core browser checks** and **9 host checks**; browser pages passed in Chromium 143.0.7499.4 and Safari 26.3.1 on macOS. The shortcut-label regression was observed failing (30/31) before the display fix. Host checks use captured descendant events, real File/DOM/Range APIs and local blob payload reads; actual updated-download tests have been added separately.
+
+The expanded Playwright suite discovers **48 cases** across three engines (16 per engine), including full core checks, grouped/split saved-review download round trips, system theme emulation, persistence, native keyboard activation and blocked storage. **It has not yet run in CI.** The earlier green run does not cover these unpublished changes. Local Git refs still point at `df33471` until fetched; do not read a local “synced” indicator as proof that remote `main` has no newer commits.
+
+Plan 14 is complete. Plans 15/16 are implemented and locally verified, awaiting expanded CI and the remaining native accessibility checks. Plan 13 remains open for those final integrated results, OS-reserved shortcut delivery and targeted screen-reader announcements. Core implementation and plan 01–12 historical evidence remain valid within their recorded scope.
+
+## Earlier records
+
+The sections below describe earlier checkpoints. They do not override the current status above.
+
 ## Core plans 01–12 completion
 
 The [completion audit](CORE-COMPLETION.md) closes every checklist item in plans 01–12 with local evidence. The final browser page reports **30/30 passed** in Chromium 143.0.7499.4 and Safari 26.3.1 on macOS; **12/12 Node tests** and the offline app/library build pass. New regressions cover exact tiny drags, no-target defaults, every toolbar command, overlap priority, all completion choices, and gesture cancellation/reversal/duplicate release. Trusted pointer checks cover both directions, full multiline preview, stable layout, short/vertical drags, injected cancellation/destruction, wheel scrolling and reduced motion. Native Enter/Escape/Tab checks supplement dispatched keyboard tests.
 
 Plans 13–16 remain open. Results below include earlier milestones; the audit above is the current core status.
-
-## Open export regression and documentation status
-
-Night theme is documented in [plan 16](plans/16-NIGHT-THEME.md) and remains unimplemented. Existing browser checks cover the light appearance; they do not establish night-theme contrast, preference persistence, or state preservation during theme changes.
-
-The guided “Open saved review” feature is now planned in [plan 15](plans/15-REOPEN-SAVED-REVIEW.md). Existing restore checks cover the model and manual restore path; they do not prove automatic saved-label configuration or the new guided reopen → edit → export workflow. Implementation and those end-to-end checks remain pending.
-
-The user reports that split export saves only the right-side file. Earlier Safari testing recovered the left file through its individual retry link; that proved payload availability and recovery, not reliable automatic delivery of both files. The current host also uses direction-ID filenames. Required output is `<file>_<leftlabel>.json` and `<file>_<rightlabel>.json`, including empty labels. The corrected contract and focused regression plan are documented in [plan 14](plans/14-SPLIT-EXPORT-DELIVERY.md); implementation and actual-download proof are pending.
-
-Product requirements, implementation contracts, usage/status notes, and the new fix plan are now updated for this request. Documentation is not final release sign-off: export delivery/naming results must be recorded after the fix, and native cross-platform CI remains pending. Previous test counts below must not be read as proof that the newly clarified filenames or reliable two-file delivery have passed.
 
 ## List/code selection and cross-platform follow-up
 
@@ -51,3 +59,19 @@ Regressions were demonstrated failing before fixes for toolbar focus, metadata p
 - Caveman is installed/configured, but its command hook reports its compression engine unavailable and passes output through. TOKF works with `TOKF_DB_PATH=/tmp/review-tokf.db`. Serena is active/ready and MemPalace is available. Codebase Memory remains unindexed: its worker fails daemon coordination, including a retry after source was added.
 
 Plans 01–12 are complete for core/local acceptance with the [updated evidence](CORE-COMPLETION.md). Plan 13 remains partially verified until the cross-platform and assistive-technology checks pass; the local file-to-label workflow is usable now.
+
+## Instance style configuration
+
+Plan 24: 24/24 Node tests; native macOS Safari 4/4 style checks, 31/31 core browser checks and 9/9 host checks. Verified background defaults/overrides, two isolated differently styled instances, fonts/spacing/borders/buttons, host style preservation, stable annotation anchors/history, dialog/highlight token inheritance, DOM restoration and rejection before host replacement. Every public CSS token has a consumer. Build and self-contained browser-check generation succeed. These checks do not establish new Windows/Linux, other-engine or native swipe acceptance. Codebase Memory indexing remains unavailable because daemon coordination could not be verified safely; named-source reads were used.
+
+### Full browser-suite rerun attempt
+
+Requested rerun: `npm test` and `npm run test:browser` (Chromium, Firefox, WebKit). Unit tests: 24/24 pass. Playwright exited before executing browser tests because its local web server could not bind `127.0.0.1:4173`: `listen EPERM: operation not permitted`. All three browser projects are blocked/unrun for this attempt. Earlier native Safari evidence remains separate; it does not establish a successful full-suite rerun. Run `npm run check` in a terminal or CI environment permitting a local HTTP listener to complete this verification.
+
+### Merge verification follow-up
+
+With escalation enabled, full browser verification can run. Initial failures exposed test-harness assumptions: hosted CSP prevents test-only fetches of blob download URLs, and macOS WebKit may return decomposed Unicode download filenames. Read created Blob contents directly in the in-page harness, preserve real download tests, and compare suggested filenames after NFC normalization. Keep the production CSP unchanged. Install the pinned Firefox binary before the complete rerun.
+
+### Full local suite now passing
+
+After enabling authorized escalation, installing pinned Firefox, and correcting only the harness assumptions above: `npm run check` passes 24/24 Node tests and 51/51 Playwright tests across Chromium, Firefox and WebKit on macOS. Build and browser-check page generation pass. This supersedes the earlier sandbox-blocked rerun. Remote nine-job cross-platform CI remains the separate source of Linux/Windows evidence.

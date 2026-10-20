@@ -1,6 +1,6 @@
 # 14 — Split export delivery and filenames
 
-Status: pending. Depends on: 08, 12. Priority: fix before the desktop release gate.
+Status: complete; two actual named downloads verified in all nine jobs of [CI run 3](https://github.com/recircuitcoop/review/actions/runs/39318606377). Depends on: 08, 12. Priority: fix before the desktop release gate.
 Seed: [export contract](../../selection-swipe-library.md#export). Details: [host export delivery](../IMPLEMENTATION.md#host-export-delivery-and-filenames).
 
 ## Outcome
@@ -23,8 +23,10 @@ The host prepares both files before offering delivery. Do not rely on two automa
 
 ## Done
 
-- [ ] Regression fails before the host fix; shared delivery and filename rules pass focused tests.
-- [ ] Rebuild offline app/library; verify both actual filenames and payloads, not link count alone.
-- [ ] Update README, verification record, and plan status with actual results and remaining platform gaps.
+- [x] Regression fails before the host fix; shared delivery and filename rules pass focused tests.
+- [x] Rebuild offline app/library; verify both actual filenames and payloads, not link count alone.
+- [x] Update README, verification record, and plan status with actual results and remaining platform gaps.
 
 Implementation detail: the host's filename/payload preparation is a pure helper, tested independently of downloads. It prepares both blobs/URLs before replacing existing links and never auto-clicks them. A preparation failure preserves previous links and annotations. Download status says files are ready and explicitly asks users to download each file.
+
+Evidence: 17 Node tests and the initial ten-test browser suite passed on Windows/Linux/macOS × Chromium/Firefox/WebKit. The download test captures both files, checks exact label-based names and payloads, and restores the pair. New local coverage includes 9 host checks and 31 core checks; expanded saved-review/theme CI has not run yet.

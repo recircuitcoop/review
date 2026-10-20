@@ -1,6 +1,6 @@
 # 13 — Desktop acceptance
 
-Status: partially verified; see [verification](../VERIFICATION.md). Depends on: 01–12, 14–16. Covers seed acceptance: 1–14, guided saved-review opening, and both themes.
+Status: initial nine-job cross-platform CI passed; final expanded acceptance and native manual checks remain open; see [verification](../VERIFICATION.md). Depends on: 01–12, 14–16. Covers seed acceptance: 1–14, guided saved-review opening, and both themes.
 Seed: [acceptance conditions](../../selection-swipe-library.md#acceptance-conditions) and [first checkpoint](../../selection-swipe-library.md#first-implementation-checkpoint).
 
 ## Outcome
@@ -33,4 +33,10 @@ Repeat the workflow in light/night themes and verify contrast, preference behavi
 
 The final gate depends on 14–16, so those implementations must land before complete release validation. Finish available core checks first, implement those slices, then repeat the integrated acceptance workflows. Do not mark this gate complete solely because CI configuration exists.
 
-The current sandbox cannot bind the Playwright server (`listen EPERM`), access GitHub, or initialize `.git`. The nine-job workflow is ready but has no observed successful run. Native Windows/Linux, current Firefox and targeted screen-reader/OS-shortcut results remain required. Local offline browser acceptance pages supply additional evidence without substituting for those platforms.
+The initial nine-job workflow passed on commit `e828842` in [run 3](https://github.com/recircuitcoop/review/actions/runs/39318606377): Windows/Linux/macOS × Chromium/Firefox/WebKit. The first run exposed a file-opening shadowed-variable bug, fixed in `634796e`; `e828842` refreshed the offline bundle. This session still cannot bind the local test server or write Git metadata, but authenticated GitHub browser access enabled those remote commits.
+
+The latest local changes add 31 core checks, 9 host checks, theme preference/contrast tests, and actual saved-review download round trips. Playwright discovers 48 cases across three engines (16 per engine); these additions have not yet been published/run in the OS matrix. Native OS-reserved shortcut delivery and targeted screen-reader announcements also remain unverified. Do not treat the earlier green matrix as proof of these later changes.
+
+## Newly reopened desktop UX gate
+
+User feedback on 2026-10-20 reopens desktop swipe discoverability. The requested replacement prototype uses native horizontal scrolling while hovering a pending selection (17–18), with no dragged-text control or custom diagonal recognizer. Before desktop interaction sign-off, include the desktop evidence in 20. Earlier pointer/CI passes are retained as historical regression evidence, not proof of this new interaction. Mobile has a separate physical-device gate in 19–20. These are planned follow-ups; no new gesture implementation is claimed.

@@ -397,6 +397,28 @@ await check('Swipe controller handles final displacement, duplicate release, can
   }
 });
 
+await check('All displayed shortcut hints and help use Cmd on Mac and Ctrl elsewhere, including remapping', () => {
+  const original = Object.getOwnPropertyDescriptor(navigator, 'platform');
+  try {
+    for (const platform of ['MacIntel', 'Win32', 'Linux x86_64']) {
+      Object.defineProperty(navigator, 'platform', { configurable: true, value: platform });
+      const { container, review } = mount({ shortcuts: { undo: 'mod+Q' } });
+      try {
+        const modifier = platform === 'MacIntel' ? 'Cmd' : 'Ctrl';
+        for (const [command, suffix] of [['undo', 'Q'], ['redo', 'Shift+Z'], ['finish', 'Enter'], ['export', 'Shift+E']]) {
+          const button = container.querySelector(`[data-command="${command}"]`);
+          assert(button.title.includes(`${modifier}+${suffix}`), `${platform} ${command} lacks concrete modifier: ${button.title}`);
+          assert(!button.title.includes('Mod+'), `${platform} exposes Mod in a tooltip`);
+        }
+        equal(container.querySelector('[data-command="undo"]').getAttribute('aria-keyshortcuts'), `${platform === 'MacIntel' ? 'Meta' : 'Control'}+Q`);
+        click(container, 'help'); const help = container.querySelector('dialog');
+        assert(help.textContent.includes(`${modifier}+Q`), `${platform} remapped help is wrong`);
+        assert(!help.textContent.includes('Mod+'), `${platform} help exposes Mod`);
+      } finally { review.destroy(); container.remove(); }
+    }
+  } finally { if (original) Object.defineProperty(navigator, 'platform', original); else delete navigator.platform; }
+});
+
 const failed = results.filter(r => !r.passed).length;
 document.querySelector('#summary').textContent = `${failed ? 'FAIL' : 'PASS'}: ${results.length - failed}/${results.length} real-browser checks`;
 document.title = document.querySelector('#summary').textContent;

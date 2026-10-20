@@ -1,6 +1,6 @@
 # 07 — Swipe classification
 
-Status: complete for core/local acceptance; see [completion evidence](../CORE-COMPLETION.md). Native release coverage belongs to plan 13. Depends on: 05. Covers seed acceptance: 3, 4.
+Status: original pointer prototype locally verified; desktop UX reopened by user feedback and mobile unverified. See [historical evidence](../CORE-COMPLETION.md) and new [plans 17–20](17-NATIVE-SCROLL-UX-PROTOTYPE.md). Native release coverage remains open in 13/20. Depends on: 05. Covers seed acceptance: 3, 4.
 Seed: [selection and gesture contract](../../selection-swipe-library.md#selection-and-gesture-contract).
 
 ## Outcome
@@ -24,3 +24,7 @@ Incomplete/canceled swipes retain pending state. Vertical motion keeps scrolling
 
 - [x] Boundary tests immediately below/at/above documented thresholds pass.
 - [x] Trusted pointer checks confirm preview, scrolling, and reduced motion; injected cancellation during trusted movement confirms cleanup and retained pending text. See the evidence for the OS-interruption limit.
+
+## UX review follow-up (2026-10-20)
+
+Prior checked items apply to the original pointer prototype only. The user cannot discover the mouse/trackpad action and rejects desktop dragged-text controls. The preferred new desktop prototype uses native horizontal scrolling over pending text, without custom diagonal recognition or native-scroll suppression. No code changes have been made for that proposal. Mobile selection/handles/scrolling/pinch and native touch classification remain to be designed and verified separately. Complete gates 17–20 before making broader swipe UX/support claims.

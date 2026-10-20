@@ -1,0 +1,132 @@
+<div id="inline-whisper-study" aria-label="Inline whisper configuration preview">
+<div class="viz-dotted-background" style="padding:22px 8px" aria-label="Selected toolbar swap design">
+<div class="iw swap" aria-label="Toolbar swap with a one-line whisper"></div>
+</div>
+</div>
+<style>
+#inline-whisper-study{color-scheme:light dark}
+#inline-whisper-study .viz-carousel>section{min-height:760px;padding:22px 8px 10px;box-sizing:border-box}
+#inline-whisper-study .iw{--iw-paper:light-dark(#fff,#222);--iw-ink:light-dark(#252525,#eee);--iw-muted:light-dark(#626262,#bcbcbc);--iw-line:light-dark(#d5d5d5,#575757);--iw-soft:light-dark(#f3f3f3,#303030);--iw-selection:light-dark(#e5e5e5,#454545);background:var(--iw-paper);color:var(--iw-ink);border:1px solid var(--iw-line);border-radius:5px;font:14px/1.65 system-ui,sans-serif;max-width:700px;margin:auto;overflow-wrap:anywhere}
+#inline-whisper-study .iw *{box-sizing:border-box}
+#inline-whisper-study .iw button{background:transparent;color:var(--iw-ink);font:inherit;border:0;border-radius:3px;padding:7px 9px;min-height:36px}
+#inline-whisper-study .iw button:disabled{opacity:.4}
+#inline-whisper-study .iw header{border-bottom:1px solid var(--iw-line)}
+#inline-whisper-study .iw .navline{display:flex;gap:10px;align-items:center;padding:11px 18px;flex-wrap:wrap;min-height:62px}
+#inline-whisper-study .iw .filename{font-size:12px;color:var(--iw-muted);flex:1;min-width:130px}
+#inline-whisper-study .iw .toggle{margin-left:auto}
+#inline-whisper-study .iw .done{border:1px solid var(--iw-line);font-size:12px}
+#inline-whisper-study .iw .commands{display:flex;gap:5px 10px;flex-wrap:wrap;align-items:center;padding:9px 18px;border-top:1px solid var(--iw-line)}
+#inline-whisper-study .iw .commands button{font-size:12px}
+#inline-whisper-study .iw .commands .label-command{border:1px solid var(--iw-line)}
+#inline-whisper-study .iw .group{display:flex;flex-wrap:wrap;gap:3px 8px;align-items:center}
+#inline-whisper-study .iw .group small{display:block;width:100%;color:var(--iw-muted);font-size:11px;margin:0 0 3px}
+#inline-whisper-study .shelf .commands{align-items:start;gap:15px;display:grid;grid-template-columns:1.2fr 1fr}
+#inline-whisper-study .swap .commands{border:0;padding:0;flex:1}
+#inline-whisper-study .iw .help{font-size:12px;color:var(--iw-muted);margin:0;padding:12px 18px;border-top:1px solid var(--iw-line);background:var(--iw-soft)}
+#inline-whisper-study .iw article{padding:30px 38px 22px}
+#inline-whisper-study .iw .eyebrow{font-size:12px;color:var(--iw-muted);letter-spacing:.05em}
+#inline-whisper-study .iw h2{font:500 25px/1.3 system-ui;margin:9px 0 23px}
+#inline-whisper-study .iw p{margin:0 0 22px}
+#inline-whisper-study .iw .passage{display:inline;font:inherit;text-align:left;padding:1px 0;min-height:0;border-radius:0;background:var(--iw-selection);border-bottom:1px solid var(--iw-ink)}
+#inline-whisper-study .iw[data-stage="Labeled"] .passage{background:var(--iw-soft);border-bottom:2px solid var(--iw-ink)}
+#inline-whisper-study .iw[data-stage="Reading"] .passage{background:transparent;border-bottom:0}
+#inline-whisper-study .iw .whisper{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px;font:12px/1.65 system-ui;color:var(--iw-muted);margin:-11px 0 24px;min-height:24px}
+#inline-whisper-study .iw .whisper-status{font-weight:400;text-align:center;white-space:nowrap;color:var(--iw-muted)}
+#inline-whisper-study .iw [data-whisper-label]{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#inline-whisper-study .iw [data-whisper-label="b"]{text-align:right}
+#inline-whisper-study .iw .whisper .active{text-decoration:underline;text-underline-offset:4px;color:var(--iw-ink)}
+#inline-whisper-study .iw .whisper-hint{margin-top:3px}
+#inline-whisper-study .iw .note{font-size:12px;color:var(--iw-muted)}
+#inline-whisper-study .iw .code{white-space:pre-wrap;padding:12px;background:var(--iw-soft);font:12px/1.7 ui-monospace,monospace;margin:0 0 22px}
+#inline-whisper-study .iw [hidden]{display:none!important}
+#inline-whisper-study .iw.narrow{max-width:350px}
+#inline-whisper-study .iw.narrow article{padding:25px 20px}
+#inline-whisper-study .iw.narrow .commands{gap:8px}
+#inline-whisper-study .iw.narrow.shelf .commands{grid-template-columns:1fr}
+#inline-whisper-study .iw.narrow.swap .commands{flex-basis:100%;order:3}
+@media(max-width:500px){#inline-whisper-study .viz-carousel>section{min-height:1020px}#inline-whisper-study .iw article{padding:25px 20px}#inline-whisper-study .shelf .commands{grid-template-columns:1fr}#inline-whisper-study .swap .commands{flex-basis:100%;order:3}}
+@media(pointer:coarse){#inline-whisper-study .iw button{min-height:44px}}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('inline-whisper-study');
+const presets={Application:{a:'Accept',b:'Reject'},Research:{a:'Evidence',b:'Question'},Relevance:{a:'Not relevant',b:'Relevant'}};
+const restored=window.openai?.widgetState?.privateContent?.inlineWhisper;
+const settings={labels:Object.hasOwn(presets,restored?.labels)?restored.labels:'Application'};
+const views={};
+const mac=/Mac|iPhone|iPad/.test(navigator.platform);
+const mod=mac?'Option':'Alt';
+function persist(){window.openai?.setWidgetState?.({modelContent:{direction:'Inline whisper',labelExample:settings.labels},privateContent:{inlineWhisper:{labels:settings.labels,views:Object.fromEntries(Object.entries(views).map(([name,v])=>[name,v.state]))}}})?.catch(()=>{});}
+root.querySelectorAll('.iw').forEach(el=>{
+ const index=1;
+ const name='Toolbar swap';
+ const saved=restored?.views?.[name];
+ const state={stage:['Reading','Selection','Labeled'].includes(saved?.stage)?saved.stage:'Selection',assigned:saved?.assigned==='a'?'a':'b',expanded:saved?.expanded??false,narrow:!!saved?.narrow};
+ const labelGroup='<div class="group"><small data-group-title>Label selection</small><button type="button" class="label-command cursor-interaction" data-assign="a"></button><button type="button" class="label-command cursor-interaction" data-assign="b"></button></div>';
+ const historyGroup='<div class="group"><small data-group-title>Selection & history</small><button type="button" class="cursor-interaction" data-action="undo">Undo</button><button type="button" class="cursor-interaction" data-action="redo">Redo</button><button type="button" class="cursor-interaction" data-action="clear">Clear</button></div>';
+ const reviewGroup='<div class="group"><small data-group-title>Review</small><button type="button" class="cursor-interaction" data-action="annotations">Annotations</button><button type="button" class="cursor-interaction" data-action="export">Export</button><button type="button" class="cursor-interaction" data-action="help">Help</button></div>';
+ const commands=`<div class="commands" id="iw-commands-${index}">${labelGroup}${historyGroup}${reviewGroup}</div>`;
+ el.innerHTML=`<header><div class="navline"><span class="filename">project-notes.md</span>${index===1?commands:''}<button type="button" class="toggle cursor-interaction" aria-label="Expand or collapse review controls" aria-controls="iw-commands-${index}" aria-expanded="true">•••</button><button type="button" class="done cursor-interaction">Done</button></div>${index!==1?commands:''}<p class="help" hidden></p></header><article><div class="eyebrow">PROJECT NOTES / 03</div><h2>A reliable review flow</h2><p>The reader should always know what is selected and what has been labeled.</p><p><button type="button" class="passage cursor-interaction" aria-label="Select example passage">Keep local work available when saving fails.</button> A failed export must leave the review open for retry.</p><div class="whisper" role="status" aria-live="polite"><div class="whisper-status"></div><div class="whisper-labels"><span data-whisper-label="a"></span><span data-whisper-label="b"></span></div><div class="whisper-hint"></div></div><p>Give every annotation a stable identity, including passages that overlap.</p><pre class="code"><code>review.restore(savedAnnotations)</code></pre><p class="note">Every annotation remains independently editable.</p></article>`;
+ const whisper=el.querySelector('.whisper');
+ whisper.prepend(el.querySelector('[data-whisper-label="a"]'));
+ whisper.append(el.querySelector('[data-whisper-label="b"]'));
+ el.querySelector('.whisper-labels').remove();
+ el.querySelector('.whisper-hint').remove();
+ const toggle=el.querySelector('.toggle');
+ const panel=el.querySelector('.commands');
+ const help=el.querySelector('.help');
+ let canRedo=false;
+ function render(){
+  const labels=presets[settings.labels];
+  const pending=state.stage==='Selection';const labeled=state.stage==='Labeled';
+  el.dataset.stage=state.stage;el.classList.toggle('narrow',state.narrow);
+  panel.hidden=!state.expanded;toggle.setAttribute('aria-expanded',String(state.expanded));
+  el.querySelector('.filename').hidden=index===1&&state.expanded;
+  el.querySelectorAll('[data-group-title]').forEach(t=>t.hidden=index!==2);
+  el.querySelector('.whisper-status').textContent=pending?'Selected · Unlabeled':labeled?'Labeled':'No selection';
+  ['a','b'].forEach(id=>{
+   const text=id==='a'?`← ${labels[id]}`:`${labels[id]} →`;
+   const mark=el.querySelector(`[data-whisper-label="${id}"]`);mark.textContent=labeled&&state.assigned===id?(id==='a'?`← ✓ ${labels[id]}`:`✓ ${labels[id]} →`):text;mark.classList.toggle('active',labeled&&state.assigned===id);mark.dataset.tooltip=labels[id];
+   const button=el.querySelector(`[data-assign="${id}"]`);button.textContent=text;button.disabled=!pending&&!labeled;
+  });
+  el.querySelector('.whisper').setAttribute('aria-label',pending?`Selected, not labeled yet. Left: ${labels.a}. Right: ${labels.b}.`:labeled?`Labeled ${labels[state.assigned]}. Left: ${labels.a}. Right: ${labels.b}.`:`No selection. Left: ${labels.a}. Right: ${labels.b}.`);
+  el.querySelector('[data-action="undo"]').disabled=!labeled;
+  el.querySelector('[data-action="redo"]').disabled=!canRedo;
+  el.querySelector('[data-action="clear"]').disabled=!pending;
+ }
+ function assign(id){state.assigned=id;state.stage='Labeled';canRedo=false;help.hidden=true;render();persist();}
+ toggle.onclick=()=>{state.expanded=!state.expanded;if(!state.expanded){help.hidden=true;toggle.focus();}render();persist();};
+ el.querySelectorAll('[data-assign]').forEach(b=>b.onclick=()=>assign(b.dataset.assign));
+ el.querySelector('.passage').onclick=e=>{e.currentTarget.focus();state.stage='Selection';canRedo=false;render();persist();};
+ el.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>{
+  switch(b.dataset.action){
+   case 'undo':state.stage='Selection';canRedo=true;break;
+   case 'redo':state.stage='Labeled';canRedo=false;break;
+   case 'clear':state.stage='Reading';break;
+   case 'annotations':help.hidden=false;help.textContent=state.stage==='Labeled'?`1 annotation · ${presets[settings.labels][state.assigned]} · “Keep local work available when saving fails.”`:'No committed annotations in this preview.';break;
+   case 'export':help.hidden=false;help.textContent='Preview only · export uses the format configured by the host.';break;
+   case 'help':help.hidden=!help.hidden;help.textContent=`Hover the pending highlight and scroll horizontally to label. Or use ${mod}+Left / Right. Escape clears a pending selection; ${mac?'Cmd':'Ctrl'}+Z undoes a change. The top bar offers the same commands without a gesture.`;break;
+  }
+  render();persist();
+ });
+ el.querySelector('.done').onclick=()=>{state.expanded=true;help.hidden=false;help.textContent=state.stage==='Selection'?'Label or clear the pending selection before finishing.':'Preview only · the host would save the review here.';render();persist();};
+ el.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){e.preventDefault();if(state.expanded){state.expanded=false;help.hidden=true;toggle.focus();}else if(state.stage==='Selection')state.stage='Reading';render();persist();return;}
+  if(e.altKey&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&['ArrowLeft','ArrowRight'].includes(e.key)&&state.stage!=='Reading'){e.preventDefault();assign(e.key==='ArrowLeft'?'a':'b');}
+  if((mac?e.metaKey:e.ctrlKey)&&!e.altKey&&e.key.toLowerCase()==='z'){
+   if(e.shiftKey&&canRedo){e.preventDefault();state.stage='Labeled';canRedo=false;render();persist();}
+   else if(!e.shiftKey&&state.stage==='Labeled'){e.preventDefault();state.stage='Selection';canRedo=true;render();persist();}
+  }
+ });
+ views[name]={state,render};render();
+ if(globalThis.Tweak){const tweak=new Tweak({container:el,onChange:()=>{render();persist();}});tweak.addSelect(state,'stage',{label:'Selection state',options:['Reading','Selection','Labeled']});tweak.addToggle(state,'expanded',{label:'Top bar expanded'});tweak.addToggle(state,'narrow',{label:'Narrow layout'});}
+});
+function renderAll(){Object.values(views).forEach(v=>v.render());}
+if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:()=>{renderAll();persist();}});tweak.addSelect(settings,'labels',{label:'Example host label values',options:Object.keys(presets)});}
+window.addEventListener('openai:set_globals',event=>{
+ const incoming=event.detail?.globals?.widgetState?.privateContent?.inlineWhisper;if(!incoming)return;
+ if(Object.hasOwn(presets,incoming.labels))settings.labels=incoming.labels;
+ Object.entries(views).forEach(([name,v])=>{const next=incoming.views?.[name];if(!next)return;if(['Reading','Selection','Labeled'].includes(next.stage))v.state.stage=next.stage;if(['a','b'].includes(next.assigned))v.state.assigned=next.assigned;if(typeof next.expanded==='boolean')v.state.expanded=next.expanded;v.state.narrow=!!next.narrow;});renderAll();
+});
+})();
+</script>

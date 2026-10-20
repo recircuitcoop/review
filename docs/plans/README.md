@@ -2,9 +2,19 @@
 
 Seed: [selection-swipe-library.md](../../selection-swipe-library.md). The seed remains the product contract; these plans divide its implementation, not its release scope.
 
-Plans 01–12 are complete for core implementation and local acceptance. See the [completion audit](../CORE-COMPLETION.md): 12 Node tests and 30 browser checks pass, with trusted pointer/keyboard evidence. **Plan 14 is the next fix** for split-download delivery and label-based filenames. Plans 15 (guided saved-review opening) and 16 (night theme) are documented and pending. Plan 13 is partially verified and must cover all follow-ups plus native cross-platform testing. See [verification](../VERIFICATION.md) for actual evidence and limits.
+Plans **01–12** are complete for core/local acceptance. **14** is complete with both real downloads verified in the initial nine-job CI matrix. **15** (saved-review reopening) and **16** (night theme) are implemented and locally verified; expanded CI and remaining native accessibility checks are pending. **13** remains open: the initial Windows/Linux/macOS × Chromium/Firefox/WebKit run passed, but the newer feature/shortcut tests must pass that gate too. See [verification](../VERIFICATION.md).
+
+Latest recorded local proof: **21 Node tests**, **31 core browser checks**, and **9 host checks**. The browser pages passed in Chromium and Safari on macOS. The earlier [green CI run](https://github.com/recircuitcoop/review/actions/runs/39318606377) covers 17 Node tests and 10 browser tests per job; it does not cover the subsequent unpublished changes. Displayed shortcuts now use Cmd on macOS and Ctrl elsewhere; the new remapping/display regression passed locally.
+
+## Newly requested interaction work
+
+The user reports that desktop swiping is not understandable. Following a joint UX-expert/senior-frontend review, plans **17–20** are documented and **not implemented**. The preferred desktop prototype is **select → hover the highlight → native horizontal scroll → label**. The user rejected dragged-text/handle instructions and custom diagonal recognition. Preserve OS/browser scrolling, zoom and navigation; do not transfer the pointer prototype's thresholds to wheel input. Mobile selection/swiping has a separate native-device gate.
+
+Proceed **17 → 18 → 19 → 20**, with no implementation past a failed prerequisite. Existing 07 checks prove the earlier prototype within their recorded limits, not acceptance of this new UX. Existing 13 remains open; its desktop interaction claims must include the relevant new desktop evidence. See the [user decisions and joint review](17-NATIVE-SCROLL-UX-PROTOTYPE.md).
 
 ## Working method
+
+Widget visual planning is tracked in [21 — Library widget design](21-LIBRARY-WIDGET-DESIGN.md), with accepted flow decisions in [22](22-WHISPER-USER-FLOW-REVIEW.md). The lo-fi is approved; [23 — High fidelity](23-WIDGET-HIGH-FIDELITY.md) is ready for user review. A fixed-height toolbar swaps in through •••. The contextual whisper uses actual label values, explicit checked assignment and no idle row; the keyboard icon opens shortcut help. Done is the only user-facing export action. These design gates precede production UI work in 18/19 and do not replace native-input proof.
 
 Write any missing contract details in the owning plan before tests or code. Add the listed failing tests, implement only that slice, then check off its completion items with actual commands and evidence. Reuse the same fixtures and test harness. Do not invent commands before tooling exists.
 
@@ -30,6 +40,14 @@ Keep accessibility in every interaction slice. Use real browser tests for select
 | [14 — Split export delivery](14-SPLIT-EXPORT-DELIVERY.md) | Both label files download with `<file>_<label>.json` names. | 08, 12; before 13 |
 | [15 — Reopen saved review](15-REOPEN-SAVED-REVIEW.md) | Load saved annotations, edit, and export the complete revised review. | 09, 14; before 13 |
 | [16 — Night theme](16-NIGHT-THEME.md) | Light/night switching preserves readability and annotation state. | 02, 05; before 13 |
+| [17 — Native-scroll UX prototype](17-NATIVE-SCROLL-UX-PROTOTYPE.md) | Validate hover + native horizontal scrolling and first-use understanding. | Current implementation; before 18 |
+| [18 — Desktop hover/scroll labeling](18-DESKTOP-HOVER-SCROLL-LABELING.md) | Map native horizontal input over pending text to one correct label. | 17; feeds 13/20 |
+| [19 — Mobile selection and swipe](19-MOBILE-NATIVE-SELECTION-AND-SWIPE.md) | Preserve native text selection/scroll/zoom while enabling deliberate labeling. | 17, shared safety from 18 |
+| [20 — Input UX acceptance](20-INPUT-UX-ACCEPTANCE.md) | Prove desktop discoverability and actual desktop/mobile hardware behavior. | 18, 19; desktop evidence feeds 13 |
+| [21 — Library widget design](21-LIBRARY-WIDGET-DESIGN.md) | Choose one of five lo-fi directions, then agree high-fidelity design and detailed interactions. | 17 decisions; before production UI in 18/19 |
+| [22 — Whisper user-flow review](22-WHISPER-USER-FLOW-REVIEW.md) | Agree state-led guidance, correction flow and narrow/multiline priorities after UX/design/frontend review. | 21 selected direction; native instruction depends on 17 |
+| [23 — Widget high fidelity](23-WIDGET-HIGH-FIDELITY.md) | Refine the approved composition, palettes, typography and control states for user review. | 21/22 accepted lo-fi; before production UI |
+| [24 — Instance style configuration](24-INSTANCE-STYLE-CONFIGURATION.md) | Configure background, colours, buttons, typography, spacing and borders at mount; retain approved defaults. | 23 approved visual style |
 
 ## Acceptance coverage
 
@@ -60,4 +78,4 @@ Numbers refer to the seed's “Acceptance conditions.” Plan 13 verifies all co
 - 07: measure and document swipe thresholds; they are tuning values, not new host configuration requirements.
 - 13: declare tested desktop browser/OS versions and mapping conflicts. Automated engine coverage does not prove OS shortcut compatibility.
 
-No backend, accounts, collaboration, model suggestions, touch validation, extra labels, or mutable-document reattachment is included. The demo is a small host for the library, not a separate application platform.
+No backend, accounts, collaboration, model suggestions, extra labels, or mutable-document reattachment is introduced. Touch is currently unverified; the newly requested mobile work is scoped in 19–20. The demo remains a small host for the library; no setup/file forms are added to the mounted library.

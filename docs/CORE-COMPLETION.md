@@ -2,6 +2,10 @@
 
 Status: complete for the core implementation and local acceptance checks, 2026-10-19. Native cross-platform release validation remains in plan 13. Plans 14–16 remain separate pending work: split-download delivery/naming, guided reopening, and night theme.
 
+## Later UX review
+
+On 2026-10-20, user feedback reopened swipe discoverability and requested mobile support planning. [Plans 17–20](plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md) cover the preferred desktop hover/native-horizontal-scroll prototype and separate mobile validation. The evidence below concerns the earlier pointer prototype; it is not sign-off for these new interactions.
+
 ## Evidence
 
 `npm test`: **12/12 pass**. `npm run build`: pass, producing the standalone offline application and reusable library. `npm run test:page`: builds the reproducible acceptance and pointer pages.

@@ -4,73 +4,146 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Review — Markdown annotation</title>
-  <style>:root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #203129; background: #f5f5ef; }
+  <style>:root {
+  --review-page: #f5f5ef;
+  --review-panel: #ffffff;
+  --review-subtle: #f4f6f0;
+  --review-text: #203129;
+  --review-muted: #52614f;
+  --review-border: #74826f;
+  --review-focus: #315da5;
+  --review-primary: #294d3b;
+  --review-primary-hover: #1c392b;
+  --review-on-primary: #ffffff;
+  --review-link: #37644a;
+  --review-code: #eef1e9;
+  --review-left-bg: #e1f3e9;
+  --review-left-text: #102d25;
+  --review-left-border: #537c63;
+  --review-right-bg: #ffebde;
+  --review-right-text: #512510;
+  --review-right-border: #966945;
+  --review-active-bg: #f2eafa;
+  --review-active-text: #30204b;
+  --review-active-border: #8060a8;
+  --review-mark-left-bg: #c5eddc;
+  --review-mark-left-text: #102d25;
+  --review-mark-right-bg: #ffdac7;
+  --review-mark-right-text: #512510;
+  --review-mark-pending-bg: #b9d6ff;
+  --review-mark-pending-text: #142f58;
+  --review-mark-active-bg: #e3d0ff;
+  --review-mark-active-text: #30204b;
+  --review-backdrop: #1b291d77; --review-shadow: #17391c33;
+  color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: var(--review-text); background: var(--review-page);
+}
+:root[data-theme="dark"] {
+  --review-page: #101713;
+  --review-panel: #18231c;
+  --review-subtle: #202d24;
+  --review-text: #eaf2e8;
+  --review-muted: #becbbc;
+  --review-border: #82927f;
+  --review-focus: #98baff;
+  --review-primary: #abd7b8;
+  --review-primary-hover: #c1e8cb;
+  --review-on-primary: #102d25;
+  --review-link: #b6e4c4;
+  --review-code: #111b15;
+  --review-left-bg: #234332;
+  --review-left-text: #e4f9ec;
+  --review-left-border: #83c59d;
+  --review-right-bg: #4b3024;
+  --review-right-text: #ffecdf;
+  --review-right-border: #e0ad8b;
+  --review-active-bg: #3b2c50;
+  --review-active-text: #f2e9ff;
+  --review-active-border: #c0a3eb;
+  --review-mark-left-bg: #28593f;
+  --review-mark-left-text: #e4f9ec;
+  --review-mark-right-bg: #713e25;
+  --review-mark-right-text: #fff1e5;
+  --review-mark-pending-bg: #304c77;
+  --review-mark-pending-text: #f0f6ff;
+  --review-mark-active-bg: #523375;
+  --review-mark-active-text: #f8f0ff;
+  --review-backdrop: #000000aa; --review-shadow: #00000055;
+  color-scheme: dark;
+}
 * { box-sizing: border-box; }
 body { margin: 0; }
 button, input, select { font: inherit; }
-button, .download-link { border: 1px solid #c5ccc2; border-radius: .45rem; padding: .6rem .85rem; background: #fff; color: #203129; cursor: pointer; }
-button:hover, .download-link:hover { background: #edf2e9; }
+button, .download-link { border: 1px solid var(--review-border); border-radius: .45rem; padding: .6rem .85rem; background: var(--review-panel); color: var(--review-text); cursor: pointer; }
+button:hover, .download-link:hover { background: var(--review-subtle); }
 button:disabled { opacity: .55; cursor: wait; }
-:focus-visible { outline: 3px solid #426eb7; outline-offset: 3px; }
-.host-header { border-bottom: 1px solid #dce1d7; background: #fff; padding: 1.4rem max(1.5rem, calc((100vw - 1380px)/2)); display: flex; align-items: center; gap: 1rem; }
+:focus-visible { outline: 3px solid var(--review-focus); outline-offset: 3px; }
+.host-header { border-bottom: 1px solid var(--review-border); background: var(--review-panel); padding: 1.4rem max(1.5rem, calc((100vw - 1380px)/2)); display: flex; align-items: center; gap: 1rem; }
 .host-header .wordmark { font-size: 1.4rem; font-weight: 750; letter-spacing: -.06rem; }
-.host-header .badge { font-size: .75rem; border: 1px solid #dce1d7; border-radius: 1rem; padding: .2rem .6rem; }
+.host-header .badge { font-size: .75rem; border: 1px solid var(--review-border); border-radius: 1rem; padding: .2rem .6rem; }
 main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
-.eyebrow { text-transform: uppercase; font-size: .72rem; letter-spacing: .15em; font-weight: 700; color: #63715e; }
+.eyebrow { text-transform: uppercase; font-size: .72rem; letter-spacing: .15em; font-weight: 700; color: var(--review-muted); }
 .intro h1 { font-size: clamp(2rem, 4vw, 3.25rem); letter-spacing: -.055em; margin: .5rem 0; }
-.intro p { color: #667263; max-width: 42rem; line-height: 1.6; }
-.setup { padding: 1.5rem; background: #fff; border: 1px solid #dce1d7; border-radius: .8rem; margin: 1.7rem 0; }
+.intro p { color: var(--review-muted); max-width: 42rem; line-height: 1.6; }
+.setup { padding: 1.5rem; background: var(--review-panel); border: 1px solid var(--review-border); border-radius: .8rem; margin: 1.7rem 0; }
 .setup-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; }
 .setup label, .restore-control { display: grid; gap: .5rem; font-size: .85rem; font-weight: 600; }
-.setup input:not([type=file]), .setup select { border: 1px solid #c5ccc2; border-radius: .4rem; padding: .6rem; width: 12rem; background: #fff; }
+.setup input:not([type=file]), .setup select { border: 1px solid var(--review-border); border-radius: .4rem; padding: .6rem; width: 12rem; color: var(--review-text); background: var(--review-panel); }
 .setup input[type=file] { max-width: 21rem; font-weight: normal; }
-.primary, .review-finish { background: #294d3b; color: #fff; border-color: #294d3b; }
-.primary:hover, .review-finish:hover { background: #1c392b; color: #fff; }
-#host-status { min-height: 1.4rem; color: #4e6353; font-size: .9rem; }
+.primary, .review-finish { background: var(--review-primary); color: var(--review-on-primary); border-color: var(--review-primary); }
+.primary:hover, .review-finish:hover { background: var(--review-primary-hover); color: var(--review-on-primary); }
+#host-status { min-height: 1.4rem; color: var(--review-muted); font-size: .9rem; }
 .host-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 1.5rem; margin: 1rem 0; }
 .restore-control input { font-weight: normal; }
 #downloads { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1.25rem; }
 .download-link { display: inline-block; font-size: .85rem; text-decoration: none; }
-.review { border: 1px solid #dce1d7; border-radius: .8rem; background: #fff; overflow: clip; }
-.review-toolbar { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; padding: 1rem; background: #fafbf7; border-bottom: 1px solid #e1e6dc; }
-.review-command { font-size: .78rem; padding: .45rem .65rem; }
-.review-left { background: #e1f3e9; border-color: #a5cfb7; }
-.review-right { background: #ffebde; border-color: #e6c3a8; }
-.review-finish { margin-left: auto; }
-.review-mode { font-size: .77rem; color: #697665; margin: 0; padding: .75rem 1.4rem; border-bottom: 1px solid #edf0e9; }
+/* Instance tokens are set by mountReview; host-page styles above stay host-owned. */
+.review { border: var(--review-border-width) solid var(--review-border); border-radius: var(--review-radius); background: var(--review-panel); color: var(--review-text); font-family: var(--review-font-family); font-size: var(--review-font-size); line-height: var(--review-line-height); box-shadow: var(--review-box-shadow); overflow: clip; }
+.review :focus-visible { outline: var(--review-focus-width) solid var(--review-focus); outline-offset: var(--review-focus-offset); }
+.review ::selection { color: var(--review-mark-pending-text); background: var(--review-mark-pending-bg); }
+.review button { font-family: inherit; font-size: var(--review-button-size); line-height: inherit; border: var(--review-button-border-width) solid var(--review-button-border); border-radius: var(--review-button-radius); padding: var(--review-button-padding); background: var(--review-button-bg); color: var(--review-button-text); }
+.review button:hover { background: var(--review-button-hover); }
+.review-toolbar { display: flex; flex-wrap: wrap; gap: var(--review-toolbar-gap); align-items: center; padding: var(--review-toolbar-padding); background: var(--review-toolbar-bg); border-bottom: var(--review-border-width) solid var(--review-border); }
+.review .review-left, .review .review-left:hover { color: var(--review-left-text); background: var(--review-left-bg); border-color: var(--review-left-border); }
+.review .review-right, .review .review-right:hover { color: var(--review-right-text); background: var(--review-right-bg); border-color: var(--review-right-border); }
+.review .review-finish { margin-left: auto; background: var(--review-primary); color: var(--review-on-primary); border-color: var(--review-primary); }
+.review .review-finish:hover { background: var(--review-primary-hover); }
+.review-mode { font-size: var(--review-small-size); color: var(--review-muted); margin: 0; padding: var(--review-status-padding); border-bottom: var(--review-border-width) solid var(--review-border); }
 .review-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
-.review-document { font-family: Georgia, 'Times New Roman', serif; font-size: 1.1rem; line-height: 1.85; padding: 2rem clamp(1.5rem, 4vw, 4.5rem) 4rem; min-height: 25rem; overflow-wrap: anywhere; touch-action: pan-y; }
-.review-document h1, .review-document h2, .review-document h3 { font-family: ui-sans-serif, system-ui, sans-serif; letter-spacing: -.035em; line-height: 1.3; }
-.review-document h1 { font-size: 2rem; }
-.review-document a { color: #37644a; text-decoration-style: dotted; }
-.review-document p:focus-visible, .review-document h1:focus-visible, .review-document h2:focus-visible { outline-offset: .4rem; }
-.review-document pre { background: #f1f3ed; padding: 1rem; overflow: auto; line-height: 1.5; border-radius: .35rem; white-space: pre-wrap; }
-.review-document code { font-size: .85em; }
-.review-document blockquote { border-left: 3px solid #b4c9b8; margin-left: 0; padding-left: 1.25rem; color: #64715f; }
-.review-saved { background: #f9faf6; border-left: 1px solid #e1e6dc; padding: 1rem; }
-.review-saved h2 { text-transform: uppercase; letter-spacing: .08em; font-size: .72rem; color: #63715e; }
+.review-document { font-family: var(--review-document-font); font-size: var(--review-document-size); line-height: var(--review-document-line-height); padding: var(--review-document-padding); min-height: 25rem; overflow-wrap: anywhere; touch-action: pan-y; }
+.review-document :is(h1, h2, h3, h4, h5, h6) { font-family: var(--review-heading-font); letter-spacing: var(--review-heading-spacing); line-height: var(--review-heading-line-height); }
+.review-document h1 { font-size: var(--review-heading-size); }
+.review-document p { margin: 0 0 var(--review-paragraph-spacing); }
+.review-document a { color: var(--review-link); text-decoration-style: dotted; }
+.review-document pre { background: var(--review-code); padding: var(--review-code-padding); overflow: auto; line-height: var(--review-code-line-height); border-radius: var(--review-code-radius); white-space: pre-wrap; }
+.review-document code { font-family: var(--review-code-font); font-size: var(--review-code-size); line-height: var(--review-code-line-height); }
+.review-document blockquote { border-left: var(--review-border-width) solid var(--review-border); margin-left: 0; padding-left: var(--review-sidebar-padding); color: var(--review-muted); }
+.review-saved { background: var(--review-subtle); border-left: var(--review-border-width) solid var(--review-border); padding: var(--review-sidebar-padding); }
+.review-saved h2 { text-transform: uppercase; letter-spacing: .08em; font-size: var(--review-small-size); color: var(--review-muted); }
 .review-annotation-list { padding: 0; list-style: none; }
 .review-annotation-list li { margin: .6rem 0; }
-.review-saved-item { text-align: left; width: 100%; font-size: .8rem; line-height: 1.5; max-height: 8rem; overflow: auto; }
-.review-saved-item[aria-pressed=true] { border-color: #8060a8; background: #f2eafa; }
-.review-status { font-size: .8rem; padding: .9rem 1.4rem; margin: 0; background: #fafbf7; border-top: 1px solid #e1e6dc; }
-.review-dialog { border: 1px solid #b8c2b3; border-radius: .8rem; max-width: min(42rem, 92vw); max-height: 85vh; padding: 1.5rem; color: #203129; }
-.review-dialog::backdrop { background: #1b291d77; }
+.review .review-saved-item { text-align: left; width: 100%; font-size: var(--review-small-size); line-height: inherit; max-height: 8rem; overflow: auto; }
+.review .review-saved-item[aria-pressed=true] { border-color: var(--review-active-border); background: var(--review-active-bg); color: var(--review-active-text); }
+.review-status { font-size: var(--review-small-size); padding: var(--review-status-padding); margin: 0; background: var(--review-subtle); border-top: var(--review-border-width) solid var(--review-border); }
+.review-dialog { font: inherit; border: var(--review-border-width) solid var(--review-border); border-radius: var(--review-dialog-radius); max-width: min(42rem, 92vw); max-height: 85vh; padding: var(--review-dialog-padding); color: var(--review-text); background: var(--review-panel); box-shadow: var(--review-box-shadow); }
+.review-dialog::backdrop { background: var(--review-backdrop); }
 .review-dialog h2 { margin-top: 0; }
-.review-choices { display: grid; gap: .75rem; margin: 1rem 0; }
+.review-choices { display: grid; gap: var(--review-toolbar-gap); margin: 1rem 0; }
 .review-choices button { text-align: left; }
-.review-shortcuts { display: grid; grid-template-columns: 1fr 2fr; gap: .5rem 1rem; font-size: .85rem; }
+.review-shortcuts { display: grid; grid-template-columns: 1fr 2fr; gap: var(--review-toolbar-gap); font-size: var(--review-small-size); }
 .review-shortcuts dt { font-weight: 650; }
 .review-shortcuts dd { margin: 0; }
-.review-swipe-preview { position: fixed; z-index: 10; pointer-events: none; width: 260px; max-height: 6rem; overflow: hidden; background: #294d3b; color: white; border-radius: .5rem; padding: .8rem; box-shadow: 0 8px 32px #17391c33; font-size: .85rem; }
-footer { font-size: .75rem; color: #778170; margin-top: 2rem; }
+.review-swipe-preview { position: fixed; z-index: 10; pointer-events: none; width: 260px; max-height: 6rem; overflow: hidden; background: var(--review-primary); color: var(--review-on-primary); border-radius: var(--review-button-radius); padding: var(--review-button-padding); box-shadow: 0 8px 32px var(--review-shadow); font-size: var(--review-small-size); }
+footer { font-size: .75rem; color: var(--review-muted); margin-top: 2rem; }
 [hidden] { display: none !important; }
-@media (max-width: 850px) { .review-layout { grid-template-columns: 1fr; } .review-saved { border-left: 0; border-top: 1px solid #e1e6dc; } .review-document { padding: 1.5rem; } }
+@media (max-width: 850px) { .review-layout { grid-template-columns: 1fr; } .review-saved { border-left: 0; border-top: var(--review-border-width) solid var(--review-border); } .review-document { padding: var(--review-narrow-document-padding); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+
+#theme-toggle { margin-left: auto; }
+::selection { color: var(--review-mark-pending-text); background: var(--review-mark-pending-bg); }
 </style>
 </head>
 <body>
-  <header class="host-header"><span class="wordmark">review.</span><span class="badge">LOCAL MARKDOWN TOOL</span></header>
+  <header class="host-header"><span class="wordmark">review.</span><span class="badge">LOCAL MARKDOWN TOOL</span><button id="theme-toggle" type="button" aria-label="Night theme" aria-pressed="false">Night theme: off</button></header>
   <main>
     <section class="intro"><div class="eyebrow">Read. Select. Decide.</div><h1>Give every passage a direction.</h1><p>Open a Markdown file, select what matters, and assign either label. Export your selections as two JSON files. Your document stays in this browser.</p></section>
     <form id="setup" class="setup">
@@ -98,6 +171,42 @@ footer { font-size: .75rem; color: #778170; margin-top: 2rem; }
     <footer>No account. No upload. Unselected text stays unlabeled. Downloads include the full document text and your selected passages.</footer>
   </main>
   <script>(() => {
+  // src/theme.js
+  function initializeTheme(button) {
+    const root = document.documentElement;
+    const system = window.matchMedia("(prefers-color-scheme: dark)");
+    let preference = null;
+    try {
+      const saved = window.localStorage.getItem("review-theme");
+      if (saved === "light" || saved === "dark") preference = saved;
+    } catch {
+    }
+    function apply2() {
+      const dark = (preference ?? (system.matches ? "dark" : "light")) === "dark";
+      root.dataset.theme = dark ? "dark" : "light";
+      button.setAttribute("aria-pressed", String(dark));
+      button.setAttribute("aria-label", "Night theme");
+      button.textContent = `Night theme: ${dark ? "on" : "off"}`;
+      button.title = `Switch to ${dark ? "light" : "night"} theme`;
+    }
+    button.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    button.addEventListener("click", () => {
+      preference = root.dataset.theme === "dark" ? "light" : "dark";
+      try {
+        window.localStorage.setItem("review-theme", preference);
+      } catch {
+      }
+      apply2();
+    });
+    system.addEventListener("change", () => {
+      if (preference === null) apply2();
+    });
+    apply2();
+  }
+
   // node_modules/marked/lib/marked.esm.js
   function M() {
     return { async: false, breaks: false, extensions: null, gfm: true, hooks: null, pedantic: false, renderer: null, silent: false, tokenizer: null, walkTokens: null };
@@ -2566,6 +2675,98 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     return null;
   }
 
+  // src/styles.js
+  var tokens = {
+    background: ["--review-panel", "background-color", "light-dark(#fffefa, #1c201f)"],
+    surfaceBackground: ["--review-subtle", "background-color", "light-dark(#f1f4ef, #282f2b)"],
+    toolbarBackground: ["--review-toolbar-bg", "background-color", "light-dark(#f8f9f5, #202623)"],
+    textColor: ["--review-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+    mutedColor: ["--review-muted", "color", "light-dark(#626e68, #a5b3ac)"],
+    borderColor: ["--review-border", "border-color", "light-dark(#dce2dc, #3b4640)"],
+    focusColor: ["--review-focus", "color", "light-dark(#315da5, #98baff)"],
+    linkColor: ["--review-link", "color", "light-dark(#226453, #a0d7bd)"],
+    codeBackground: ["--review-code", "background-color", "light-dark(#f1f4ef, #282f2b)"],
+    buttonBackground: ["--review-button-bg", "background-color", "transparent"],
+    buttonTextColor: ["--review-button-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+    buttonHoverBackground: ["--review-button-hover", "background-color", "light-dark(#f1f4ef, #282f2b)"],
+    buttonBorderColor: ["--review-button-border", "border-color", "transparent"],
+    primaryBackground: ["--review-primary", "background-color", "light-dark(#263f35, #c8dfd0)"],
+    primaryHoverBackground: ["--review-primary-hover", "background-color", "light-dark(#263f35, #c8dfd0)"],
+    primaryTextColor: ["--review-on-primary", "color", "light-dark(#fffefa, #192c22)"],
+    leftBackground: ["--review-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
+    leftTextColor: ["--review-left-text", "color", "light-dark(#226453, #a0d7bd)"],
+    leftBorderColor: ["--review-left-border", "border-color", "transparent"],
+    rightBackground: ["--review-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
+    rightTextColor: ["--review-right-text", "color", "light-dark(#885634, #e7ba92)"],
+    rightBorderColor: ["--review-right-border", "border-color", "transparent"],
+    activeBackground: ["--review-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
+    activeTextColor: ["--review-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+    activeBorderColor: ["--review-active-border", "border-color", "light-dark(#74826f, #a5b3ac)"],
+    highlightLeftBackground: ["--review-mark-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
+    highlightLeftTextColor: ["--review-mark-left-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+    highlightLeftBorderColor: ["--review-mark-left-border", "color", "light-dark(#226453, #a0d7bd)"],
+    highlightRightBackground: ["--review-mark-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
+    highlightRightTextColor: ["--review-mark-right-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+    highlightRightBorderColor: ["--review-mark-right-border", "color", "light-dark(#885634, #e7ba92)"],
+    highlightPendingBackground: ["--review-mark-pending-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
+    highlightPendingTextColor: ["--review-mark-pending-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+    highlightActiveBackground: ["--review-mark-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
+    highlightActiveTextColor: ["--review-mark-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+    backdropColor: ["--review-backdrop", "color", "light-dark(#15271d55, #00000099)"],
+    shadowColor: ["--review-shadow", "color", "light-dark(#1c302012, #00000033)"],
+    boxShadow: ["--review-box-shadow", "box-shadow", "0 8px 28px light-dark(#1c302012, #00000033)"],
+    fontFamily: ["--review-font-family", "font-family", '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'],
+    fontSize: ["--review-font-size", "font-size", "14px"],
+    lineHeight: ["--review-line-height", "line-height", "1.65"],
+    documentFontFamily: ["--review-document-font", "font-family", '"Iowan Old Style", "Palatino Linotype", Georgia, serif'],
+    documentFontSize: ["--review-document-size", "font-size", "16px"],
+    documentLineHeight: ["--review-document-line-height", "line-height", "1.85"],
+    headingFontFamily: ["--review-heading-font", "font-family", "system-ui, sans-serif"],
+    headingFontSize: ["--review-heading-size", "font-size", "27px"],
+    headingLineHeight: ["--review-heading-line-height", "line-height", "1.3"],
+    headingLetterSpacing: ["--review-heading-spacing", "letter-spacing", "-.025em"],
+    codeFontFamily: ["--review-code-font", "font-family", "ui-monospace, SFMono-Regular, monospace"],
+    codeFontSize: ["--review-code-size", "font-size", "12px"],
+    codeLineHeight: ["--review-code-line-height", "line-height", "1.8"],
+    smallFontSize: ["--review-small-size", "font-size", "12px"],
+    buttonFontSize: ["--review-button-size", "font-size", "12px"],
+    borderWidth: ["--review-border-width", "border-top-width", "1px"],
+    borderRadius: ["--review-radius", "border-radius", "12px"],
+    buttonBorderWidth: ["--review-button-border-width", "border-top-width", "1px"],
+    buttonRadius: ["--review-button-radius", "border-radius", "6px"],
+    codeRadius: ["--review-code-radius", "border-radius", "7px"],
+    dialogRadius: ["--review-dialog-radius", "border-radius", "12px"],
+    focusWidth: ["--review-focus-width", "outline-width", "3px"],
+    focusOffset: ["--review-focus-offset", "outline-offset", "3px"],
+    documentPadding: ["--review-document-padding", "padding", "36px 38px 26px"],
+    narrowDocumentPadding: ["--review-narrow-document-padding", "padding", "28px 22px 24px"],
+    toolbarPadding: ["--review-toolbar-padding", "padding", "9px 18px"],
+    toolbarGap: ["--review-toolbar-gap", "gap", "8px"],
+    buttonPadding: ["--review-button-padding", "padding", "7px 9px"],
+    paragraphSpacing: ["--review-paragraph-spacing", "margin-bottom", "24px"],
+    codePadding: ["--review-code-padding", "padding", "16px 18px"],
+    dialogPadding: ["--review-dialog-padding", "padding", "22px"],
+    sidebarPadding: ["--review-sidebar-padding", "padding", "16px"],
+    statusPadding: ["--review-status-padding", "padding", "12px 18px"],
+    colorScheme: ["color-scheme", "color-scheme", "inherit"]
+  };
+  var defaultReviewStyles = Object.freeze(Object.fromEntries(Object.entries(tokens).map(([name, [, , value]]) => [name, value])));
+  function resolveReviewStyles(overrides = {}) {
+    if (!overrides || typeof overrides !== "object" || Array.isArray(overrides) || ![Object.prototype, null].includes(Object.getPrototypeOf(overrides))) throw new Error("Styles must be a map of named CSS values.");
+    for (const [name, value] of Object.entries(overrides)) {
+      if (!Object.hasOwn(tokens, name)) throw new Error(`Unknown style: ${name}`);
+      if (typeof value !== "string" || !value.trim()) throw new Error(`Style ${name} must be a nonempty CSS string.`);
+      if (name === "colorScheme" && !["inherit", "light", "dark"].includes(value.trim())) throw new Error("Style colorScheme must be inherit, light or dark.");
+      if (name !== "colorScheme" && /^(inherit|initial|unset|revert|revert-layer)$/i.test(value.trim())) throw new Error(`Style ${name} cannot use a CSS reset keyword.`);
+    }
+    return { ...defaultReviewStyles, ...overrides };
+  }
+  function applyReviewStyles(root, overrides) {
+    const styles = resolveReviewStyles(overrides);
+    for (const [name, value] of Object.entries(styles)) if (!CSS.supports(tokens[name][1], value)) throw new Error(`Invalid CSS value for style ${name}: ${value}`);
+    for (const [name, value] of Object.entries(styles)) root.style.setProperty(tokens[name][0], value);
+  }
+
   // src/review.js
   var DEFAULT_SHORTCUTS = {
     nextBlock: ["Alt+ArrowDown"],
@@ -2618,7 +2819,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       if (bindings.has(key)) throw new Error(`Shortcut conflict: ${value}`);
       bindings.set(key, command);
     }
-    return { effective: defaults, command(event) {
+    const display = Object.fromEntries(Object.entries(defaults).map(([name, keys]) => [name, keys.map((key) => key.replace(/\bmod\b/gi, mac ? "Cmd" : "Ctrl").replace(/\bmeta\b/gi, mac ? "Cmd" : "Meta"))]));
+    return { effective: defaults, display, command(event) {
       const modifiers = [];
       if (event.ctrlKey) modifiers.push("ctrl");
       if (event.altKey) modifiers.push("alt");
@@ -2638,6 +2840,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const original = [...container2.childNodes];
     const root = element("section", "review");
     root.setAttribute("aria-label", "Document annotator");
+    applyReviewStyles(root, options.styles);
     const toolbar = element("div", "review-toolbar");
     toolbar.setAttribute("role", "group");
     toolbar.setAttribute("aria-label", "Annotation controls");
@@ -2662,7 +2865,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const token = `review-${crypto.randomUUID()}`;
     const names = { left: `${token}-left`, right: `${token}-right`, pending: `${token}-pending`, active: `${token}-active` };
     const style = element("style");
-    style.textContent = `::highlight(${names.left}) { background: #c5eddc; color: #102d25; } ::highlight(${names.right}) { background: #ffdac7; color: #512510; } ::highlight(${names.pending}) { background: #b9d6ff; color: #142f58; } ::highlight(${names.active}) { background: #e3d0ff; color: #30204b; text-decoration: underline; }`;
+    style.textContent = `::highlight(${names.left}) { background: var(--review-mark-left-bg); color: var(--review-mark-left-text); text-decoration: underline solid var(--review-mark-left-border) 2px; } ::highlight(${names.right}) { background: var(--review-mark-right-bg); color: var(--review-mark-right-text); text-decoration: underline solid var(--review-mark-right-border) 2px; } ::highlight(${names.pending}) { background: var(--review-mark-pending-bg); color: var(--review-mark-pending-text); text-decoration: underline solid var(--review-mark-pending-text) 1px; } ::highlight(${names.active}) { background: var(--review-mark-active-bg); color: var(--review-mark-active-text); text-decoration: underline; }`;
     root.append(style);
     container2.replaceChildren(root);
     const text2 = canonicalText(surface);
@@ -2866,8 +3069,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     }
     function showHelp() {
       const content = element("dl", "review-shortcuts");
-      for (const [command2, keys] of Object.entries(shortcuts.effective)) content.append(element("dt", "", command2), element("dd", "", keys.join(" / ")));
-      content.append(element("dt", "", "Native selection"), element("dd", "", "Tab / Shift+Tab: normal focus. In F2 mode: arrows move; Shift+arrows select; Ctrl+Shift+Left/Right (Windows/Linux) or Option+Shift+Left/Right (macOS) extends by word."));
+      for (const [command2, keys] of Object.entries(shortcuts.display)) content.append(element("dt", "", command2), element("dd", "", keys.join(" / ")));
+      content.append(element("dt", "", "Native selection"), element("dd", "", "Tab / Shift+Tab: normal focus. In F2 mode: arrows move; Shift+arrows select; Ctrl+Shift+Left/Right (Windows/Linux) or Alt+Shift+Left/Right (macOS) extends by word."));
       openDialog("Keyboard shortcuts", content);
       return true;
     }
@@ -2971,8 +3174,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       const button = element("button", `review-command review-${name}`, title);
       button.type = "button";
       button.dataset.command = name;
-      button.title = `${title} (${shortcuts.effective[name].join(" / ")})`;
-      button.setAttribute("aria-keyshortcuts", shortcuts.effective[name].join(" ").replaceAll("Mod", /Mac/.test(navigator.platform) ? "Meta" : "Control"));
+      button.title = `${title} (${shortcuts.display[name].join(" / ")})`;
+      button.setAttribute("aria-keyshortcuts", shortcuts.effective[name].join(" ").replace(/\bmod\b/gi, /Mac/.test(navigator.platform) ? "Meta" : "Control").replace(/\bctrl\b/gi, "Control"));
       toolbar.append(button);
     }
     listen(toolbar, "click", (event) => {
@@ -3207,6 +3410,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   }
 
   // src/app.js
+  initializeTheme(document.querySelector("#theme-toggle"));
   var form = document.querySelector("#setup");
   var container = document.querySelector("#annotator");
   var status = document.querySelector("#host-status");
