@@ -1,3 +1,418 @@
+// src/model.js
+var copy = (value) => structuredClone(value);
+var compare = (a, b2) => a.start - b2.start || a.end - b2.end || (a.id < b2.id ? -1 : a.id > b2.id ? 1 : 0);
+var requiredString = (value) => typeof value === "string" && value.trim().length > 0;
+function validateOptions({ document: document2, labels }) {
+  if (!document2 || !requiredString(document2.id) || !requiredString(document2.version)) throw new Error("Document ID and immutable version are required.");
+  if (!Array.isArray(labels) || labels.length !== 2 || labels.some((l) => !l || !requiredString(l.id) || !requiredString(l.name))) throw new Error("Exactly two labels with IDs and names are required.");
+  if (new Set(labels.map((l) => l.id)).size !== 2 || new Set(labels.map((l) => l.direction)).size !== 2 || labels.some((l) => !["left", "right"].includes(l.direction))) throw new Error("Labels need distinct IDs and one left/right assignment each.");
+}
+var ReviewSession = class {
+  #annotations = [];
+  #pending = null;
+  #activeId = null;
+  #undo = [];
+  #redo = [];
+  #document;
+  #labels;
+  #emit;
+  #revision = 0;
+  constructor({ document: document2, labels, text: text2 }, onEvent = () => {
+  }) {
+    validateOptions({ document: document2, labels });
+    if (typeof text2 !== "string") throw new Error("Canonical text must be a string.");
+    this.#document = { id: document2.id, version: document2.version, text: text2, canonicalFormat: "review-text-v1", offsetUnit: "utf-16", endExclusive: true };
+    this.#labels = labels.map(({ id, name, direction }) => ({ id, name, direction }));
+    this.#emit = (name, detail) => onEvent(name, copy(detail));
+  }
+  get pending() {
+    return copy(this.#pending);
+  }
+  get activeId() {
+    return this.#activeId;
+  }
+  get text() {
+    return this.#document.text;
+  }
+  get labels() {
+    return copy(this.#labels);
+  }
+  get revision() {
+    return this.#revision;
+  }
+  read() {
+    return copy([...this.#annotations].sort(compare));
+  }
+  anchor(start, end) {
+    const text2 = this.text;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > text2.length || start >= end) throw new Error("Selection needs a nonempty in-document integer range.");
+    return { start, end, quote: text2.slice(start, end), prefix: text2.slice(Math.max(0, start - 32), start), suffix: text2.slice(end, end + 32) };
+  }
+  select(start, end) {
+    const pending = this.anchor(start, end);
+    this.#pending = pending;
+    this.#activeId = null;
+    this.#emit("selection", pending);
+    return copy(pending);
+  }
+  clear() {
+    this.#pending = null;
+    this.#activeId = null;
+    this.#emit("selection", null);
+  }
+  activate(id) {
+    if (!this.#annotations.some((a) => a.id === id)) throw new Error("Unknown annotation ID.");
+    this.#pending = null;
+    this.#activeId = id;
+    this.#emit("selection", { annotationId: id });
+  }
+  #commit(next) {
+    const previous = this.#annotations;
+    this.#undo.push(copy(previous));
+    this.#redo = [];
+    this.#annotations = next;
+    this.#revision++;
+    this.#changes(previous, next);
+  }
+  #changes(previous, next) {
+    for (const a of previous) if (!next.some((b2) => b2.id === a.id)) this.#emit("delete", a);
+    for (const a of next) {
+      const old = previous.find((b2) => b2.id === a.id);
+      if (!old) this.#emit("create", a);
+      else if (old.labelId !== a.labelId) this.#emit("update", a);
+    }
+  }
+  classify(labelId) {
+    if (!this.#labels.some((l) => l.id === labelId)) throw new Error("Unknown label ID.");
+    if (this.#pending) {
+      const annotation = { id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...this.#pending };
+      this.#pending = null;
+      this.#activeId = null;
+      this.#commit([...this.#annotations, annotation]);
+      this.clear();
+      return copy(annotation);
+    }
+    if (this.#activeId) return this.relabel(this.#activeId, labelId);
+    return null;
+  }
+  relabel(id, labelId) {
+    const target = this.#annotations.find((a) => a.id === id);
+    if (!target) throw new Error("Unknown annotation ID.");
+    if (!this.#labels.some((l) => l.id === labelId)) throw new Error("Unknown label ID.");
+    if (target.labelId === labelId) return copy(target);
+    this.#commit(this.#annotations.map((a) => a.id === id ? { ...a, labelId } : a));
+    return copy(this.#annotations.find((a) => a.id === id));
+  }
+  delete(id) {
+    if (!this.#annotations.some((a) => a.id === id)) throw new Error("Unknown annotation ID.");
+    this.#commit(this.#annotations.filter((a) => a.id !== id));
+    if (this.#activeId === id) this.clear();
+  }
+  #travel(from, to) {
+    this.clear();
+    if (!from.length) return false;
+    const previous = this.#annotations;
+    to.push(copy(previous));
+    this.#annotations = from.pop();
+    this.#revision++;
+    this.#changes(previous, this.#annotations);
+    return true;
+  }
+  undo() {
+    return this.#travel(this.#undo, this.#redo);
+  }
+  redo() {
+    return this.#travel(this.#redo, this.#undo);
+  }
+  export(format = "grouped") {
+    if (!["grouped", "split"].includes(format)) throw new Error("Export format must be grouped or split.");
+    const base = { schemaVersion: 1, document: copy(this.#document), labels: this.labels };
+    const selections = Object.fromEntries(this.#labels.map((l) => [l.id, this.read().filter((a) => a.labelId === l.id)]));
+    if (format === "split") return this.#labels.map((l) => ({ ...copy(base), selections: { [l.id]: selections[l.id] } }));
+    return { ...base, selections };
+  }
+  restore(input) {
+    const payloads = Array.isArray(input) ? input : [input];
+    if (payloads.length !== (Array.isArray(input) ? 2 : 1)) throw new Error("Restore needs a grouped payload or both split payloads.");
+    const annotations = [], groups = /* @__PURE__ */ new Set(), ids = /* @__PURE__ */ new Set();
+    for (const payload of payloads) {
+      if (!payload || payload.schemaVersion !== 1 || !payload.document || Object.entries(this.#document).some(([key, value]) => payload.document[key] !== value)) throw new Error("Restore document identity, version, canonical text, or format does not match.");
+      if (!Array.isArray(payload.labels) || payload.labels.length !== 2 || new Set(payload.labels.map((l) => l?.id)).size !== 2 || this.#labels.some((label) => !payload.labels.some((candidate) => candidate && ["id", "name", "direction"].every((key) => candidate[key] === label[key])))) throw new Error("Restore labels do not match this session.");
+      if (!payload.selections || typeof payload.selections !== "object" || Array.isArray(payload.selections)) throw new Error("Restore selections must be grouped by label ID.");
+      if (Array.isArray(input) && Object.keys(payload.selections).length !== 1) throw new Error("Each split payload must contain one label group.");
+      for (const [labelId, values] of Object.entries(payload.selections)) {
+        if (!this.#labels.some((l) => l.id === labelId) || groups.has(labelId) || !Array.isArray(values)) throw new Error("Invalid or duplicate restore label group.");
+        groups.add(labelId);
+        for (const a of values) {
+          if (!a || !requiredString(a.id) || ids.has(a.id) || a.labelId !== labelId || a.documentId !== this.#document.id || a.documentVersion !== this.#document.version) throw new Error("Invalid annotation identity, label, or duplicate ID.");
+          const anchor = this.anchor(a.start, a.end);
+          for (const field of ["quote", "prefix", "suffix"]) if (a[field] !== anchor[field]) throw new Error(`Annotation ${a.id}: ${field} does not match its positions.`);
+          ids.add(a.id);
+          annotations.push({ id: a.id, documentId: a.documentId, documentVersion: a.documentVersion, labelId, ...anchor });
+        }
+      }
+    }
+    if (groups.size !== 2) throw new Error("Restore must include both label groups, including empty groups.");
+    this.#annotations = annotations.sort(compare);
+    this.#revision++;
+    this.#undo = [];
+    this.#redo = [];
+    this.clear();
+  }
+};
+
+// src/text.js
+var BLOCKS = /* @__PURE__ */ new Set(["P", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "BLOCKQUOTE", "PRE"]);
+function canonicalText(root) {
+  const segments = [];
+  let text2 = "";
+  const append = (value, node, kind = "text") => {
+    if (!value) return;
+    segments.push({ node, kind, start: text2.length, end: text2.length + value.length });
+    text2 += value;
+  };
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const betweenBlocks = /^\s*$/.test(node.data) && [...node.parentElement.children].some((c) => BLOCKS.has(c.tagName) || ["UL", "OL"].includes(c.tagName));
+      if (!betweenBlocks) append(node.data, node);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    if (node.tagName === "BR") {
+      append("\n", node, "br");
+      return;
+    }
+    for (const child of node.childNodes) walk(child);
+    if (BLOCKS.has(node.tagName) && segments.at(-1)?.kind !== "separator") append("\n", node, "separator");
+  }
+  for (const node of root.childNodes) walk(node);
+  while (segments.at(-1)?.kind === "separator") text2 = text2.slice(0, segments.pop().start);
+  function boundary(segment, end) {
+    if (segment.kind === "text") return [segment.node, end ? segment.node.data.length : 0];
+    const parent = segment.node.parentNode;
+    const index = [...parent.childNodes].indexOf(segment.node);
+    return [parent, index + (segment.kind === "separator" || end ? 1 : 0)];
+  }
+  function offset(node, position) {
+    if (node !== root && !root.contains(node)) throw new Error("Selection is outside the document.");
+    const direct = segments.find((s) => s.node === node && s.kind === "text");
+    if (direct) return direct.start + Math.min(position, node.data.length);
+    const point2 = document.createRange();
+    point2.setStart(node, position);
+    point2.collapse(true);
+    let result = 0;
+    for (const s of segments) {
+      const edge = document.createRange();
+      edge.setStart(...boundary(s, true));
+      edge.collapse(true);
+      if (edge.compareBoundaryPoints(Range.START_TO_START, point2) <= 0) result = s.end;
+      else break;
+    }
+    return result;
+  }
+  function point(position, end) {
+    if (position < 0 || position > text2.length) throw new Error("Text position is outside the document.");
+    const s = segments.find((s2) => s2.kind === "text" && (end ? position > s2.start && position <= s2.end : position >= s2.start && position < s2.end));
+    if (s) return [s.node, position - s.start];
+    const next = segments.find((s2) => s2.start >= position && s2.kind === "text");
+    if (!end && next) return [next.node, 0];
+    const previous = segments.filter((s2) => s2.end <= position && s2.kind === "text").at(-1);
+    if (previous) return [previous.node, previous.node.data.length];
+    return next ? [next.node, 0] : [root, 0];
+  }
+  return {
+    text: text2,
+    offset,
+    range(start, end) {
+      const range = document.createRange();
+      range.setStart(...point(start, false));
+      range.setEnd(...point(end, true));
+      return range;
+    },
+    fromRange(range) {
+      return { start: offset(range.startContainer, range.startOffset), end: offset(range.endContainer, range.endOffset) };
+    }
+  };
+}
+
+// src/styles.js
+var tokens = {
+  background: ["--review-panel", "background-color", "light-dark(#fffefa, #1c201f)"],
+  surfaceBackground: ["--review-subtle", "background-color", "light-dark(#f1f4ef, #282f2b)"],
+  toolbarBackground: ["--review-toolbar-bg", "background-color", "light-dark(#f8f9f5, #202623)"],
+  textColor: ["--review-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  mutedColor: ["--review-muted", "color", "light-dark(#626e68, #a5b3ac)"],
+  borderColor: ["--review-border", "border-color", "light-dark(#dce2dc, #3b4640)"],
+  focusColor: ["--review-focus", "color", "light-dark(#315da5, #98baff)"],
+  linkColor: ["--review-link", "color", "light-dark(#226453, #a0d7bd)"],
+  codeBackground: ["--review-code", "background-color", "light-dark(#f1f4ef, #282f2b)"],
+  buttonBackground: ["--review-button-bg", "background-color", "transparent"],
+  buttonTextColor: ["--review-button-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  buttonHoverBackground: ["--review-button-hover", "background-color", "light-dark(#f1f4ef, #282f2b)"],
+  buttonBorderColor: ["--review-button-border", "border-color", "transparent"],
+  primaryBackground: ["--review-primary", "background-color", "light-dark(#263f35, #c8dfd0)"],
+  primaryHoverBackground: ["--review-primary-hover", "background-color", "light-dark(#263f35, #c8dfd0)"],
+  primaryTextColor: ["--review-on-primary", "color", "light-dark(#fffefa, #192c22)"],
+  leftBackground: ["--review-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
+  leftTextColor: ["--review-left-text", "color", "light-dark(#226453, #a0d7bd)"],
+  leftBorderColor: ["--review-left-border", "border-color", "transparent"],
+  rightBackground: ["--review-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
+  rightTextColor: ["--review-right-text", "color", "light-dark(#885634, #e7ba92)"],
+  rightBorderColor: ["--review-right-border", "border-color", "transparent"],
+  activeBackground: ["--review-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
+  activeTextColor: ["--review-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  activeBorderColor: ["--review-active-border", "border-color", "light-dark(#74826f, #a5b3ac)"],
+  highlightLeftBackground: ["--review-mark-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
+  highlightLeftTextColor: ["--review-mark-left-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  highlightLeftBorderColor: ["--review-mark-left-border", "color", "light-dark(#226453, #a0d7bd)"],
+  highlightRightBackground: ["--review-mark-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
+  highlightRightTextColor: ["--review-mark-right-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  highlightRightBorderColor: ["--review-mark-right-border", "color", "light-dark(#885634, #e7ba92)"],
+  highlightPendingBackground: ["--review-mark-pending-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
+  highlightPendingTextColor: ["--review-mark-pending-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  highlightActiveBackground: ["--review-mark-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
+  highlightActiveTextColor: ["--review-mark-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  backdropColor: ["--review-backdrop", "color", "light-dark(#15271d55, #00000099)"],
+  shadowColor: ["--review-shadow", "color", "light-dark(#1c302012, #00000033)"],
+  boxShadow: ["--review-box-shadow", "box-shadow", "0 8px 28px light-dark(#1c302012, #00000033)"],
+  fontFamily: ["--review-font-family", "font-family", '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'],
+  fontSize: ["--review-font-size", "font-size", "14px"],
+  lineHeight: ["--review-line-height", "line-height", "1.65"],
+  documentFontFamily: ["--review-document-font", "font-family", '"Iowan Old Style", "Palatino Linotype", Georgia, serif'],
+  documentFontSize: ["--review-document-size", "font-size", "16px"],
+  documentLineHeight: ["--review-document-line-height", "line-height", "1.85"],
+  headingFontFamily: ["--review-heading-font", "font-family", "system-ui, sans-serif"],
+  headingFontSize: ["--review-heading-size", "font-size", "27px"],
+  headingLineHeight: ["--review-heading-line-height", "line-height", "1.3"],
+  headingLetterSpacing: ["--review-heading-spacing", "letter-spacing", "-.025em"],
+  codeFontFamily: ["--review-code-font", "font-family", "ui-monospace, SFMono-Regular, monospace"],
+  codeFontSize: ["--review-code-size", "font-size", "12px"],
+  codeLineHeight: ["--review-code-line-height", "line-height", "1.8"],
+  smallFontSize: ["--review-small-size", "font-size", "12px"],
+  buttonFontSize: ["--review-button-size", "font-size", "12px"],
+  borderWidth: ["--review-border-width", "border-top-width", "1px"],
+  borderRadius: ["--review-radius", "border-radius", "12px"],
+  buttonBorderWidth: ["--review-button-border-width", "border-top-width", "1px"],
+  buttonRadius: ["--review-button-radius", "border-radius", "6px"],
+  codeRadius: ["--review-code-radius", "border-radius", "7px"],
+  dialogRadius: ["--review-dialog-radius", "border-radius", "12px"],
+  focusWidth: ["--review-focus-width", "outline-width", "3px"],
+  focusOffset: ["--review-focus-offset", "outline-offset", "3px"],
+  documentPadding: ["--review-document-padding", "padding", "36px 38px 26px"],
+  narrowDocumentPadding: ["--review-narrow-document-padding", "padding", "28px 22px 24px"],
+  toolbarPadding: ["--review-toolbar-padding", "padding", "9px 18px"],
+  toolbarGap: ["--review-toolbar-gap", "gap", "8px"],
+  buttonPadding: ["--review-button-padding", "padding", "7px 9px"],
+  paragraphSpacing: ["--review-paragraph-spacing", "margin-bottom", "24px"],
+  codePadding: ["--review-code-padding", "padding", "16px 18px"],
+  dialogPadding: ["--review-dialog-padding", "padding", "22px"],
+  sidebarPadding: ["--review-sidebar-padding", "padding", "16px"],
+  statusPadding: ["--review-status-padding", "padding", "12px 18px"],
+  colorScheme: ["color-scheme", "color-scheme", "inherit"]
+};
+var defaultReviewStyles = Object.freeze(Object.fromEntries(Object.entries(tokens).map(([name, [, , value]]) => [name, value])));
+function resolveReviewStyles(overrides = {}) {
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides) || ![Object.prototype, null].includes(Object.getPrototypeOf(overrides))) throw new Error("Styles must be a map of named CSS values.");
+  for (const [name, value] of Object.entries(overrides)) {
+    if (!Object.hasOwn(tokens, name)) throw new Error(`Unknown style: ${name}`);
+    if (typeof value !== "string" || !value.trim()) throw new Error(`Style ${name} must be a nonempty CSS string.`);
+    if (name === "colorScheme" && !["inherit", "light", "dark"].includes(value.trim())) throw new Error("Style colorScheme must be inherit, light or dark.");
+    if (name !== "colorScheme" && /^(inherit|initial|unset|revert|revert-layer)$/i.test(value.trim())) throw new Error(`Style ${name} cannot use a CSS reset keyword.`);
+  }
+  return { ...defaultReviewStyles, ...overrides };
+}
+function applyReviewStyles(root, overrides) {
+  const styles = resolveReviewStyles(overrides);
+  for (const [name, value] of Object.entries(styles)) if (!CSS.supports(tokens[name][1], value)) throw new Error(`Invalid CSS value for style ${name}: ${value}`);
+  for (const [name, value] of Object.entries(styles)) root.style.setProperty(tokens[name][0], value);
+}
+
+// src/shortcuts.js
+var DEFAULT_SHORTCUTS = {
+  nextBlock: ["Alt+ArrowDown"],
+  previousBlock: ["Alt+ArrowUp"],
+  selectBlock: ["Enter"],
+  precise: ["F2"],
+  left: ["Alt+ArrowLeft"],
+  right: ["Alt+ArrowRight"],
+  clear: ["Escape"],
+  remove: ["Delete", "Backspace"],
+  nextAnnotation: ["Alt+N"],
+  previousAnnotation: ["Alt+P"],
+  undo: ["Mod+Z"],
+  redo: ["Mod+Shift+Z", "Ctrl+Y"],
+  export: ["Mod+Shift+E"],
+  finish: ["Mod+Enter"],
+  help: ["F1"]
+};
+var MODIFIERS = ["ctrl", "alt", "shift", "meta"];
+function applyOverrides(effective, overrides) {
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    throw new Error("Shortcut overrides must be a command map.");
+  }
+  for (const [command, value] of Object.entries(overrides)) {
+    if (!Object.hasOwn(effective, command)) {
+      throw new Error(`Unknown shortcut command: ${command}`);
+    }
+    const keys = typeof value === "string" ? [value] : value;
+    const valid = Array.isArray(keys) && keys.length > 0 && keys.every((key) => typeof key === "string" && key.trim());
+    if (!valid) {
+      throw new Error(`Invalid shortcut for ${command}.`);
+    }
+    effective[command] = [...keys];
+  }
+}
+function normalizeChord(value, mac) {
+  const parts = value.toLowerCase().replaceAll("mod", mac ? "meta" : "ctrl").split("+");
+  const key = parts.pop();
+  const unknownModifier = parts.some((part) => !MODIFIERS.includes(part));
+  const repeatedModifier = new Set(parts).size !== parts.length;
+  if (!key || unknownModifier || repeatedModifier) {
+    throw new Error(`Invalid shortcut: ${value}`);
+  }
+  return [...parts.sort(), key].join("+");
+}
+function eventChord(event) {
+  const modifiers = [];
+  if (event.ctrlKey) modifiers.push("ctrl");
+  if (event.altKey) modifiers.push("alt");
+  if (event.shiftKey) modifiers.push("shift");
+  if (event.metaKey) modifiers.push("meta");
+  return [...modifiers.sort(), event.key.toLowerCase()].join("+");
+}
+function displayChord(chord, mac) {
+  return chord.replace(/\bmod\b/gi, mac ? "Cmd" : "Ctrl").replace(/\bmeta\b/gi, mac ? "Cmd" : "Meta");
+}
+function shortcutMap(overrides = {}) {
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const effective = structuredClone(DEFAULT_SHORTCUTS);
+  if (mac) {
+    effective.redo = ["Mod+Shift+Z"];
+  }
+  applyOverrides(effective, overrides);
+  const bindings = /* @__PURE__ */ new Map();
+  for (const [command, values] of Object.entries(effective)) {
+    for (const value of values) {
+      const chord = normalizeChord(value, mac);
+      if (bindings.has(chord)) {
+        throw new Error(`Shortcut conflict: ${value}`);
+      }
+      bindings.set(chord, command);
+    }
+  }
+  const display = {};
+  for (const [command, keys] of Object.entries(effective)) {
+    display[command] = keys.map((key) => displayChord(key, mac));
+  }
+  return {
+    effective,
+    display,
+    command(event) {
+      return bindings.get(eventChord(event));
+    }
+  };
+}
+
 // node_modules/marked/lib/marked.esm.js
 function M() {
   return { async: false, breaks: false, extensions: null, gfm: true, hooks: null, pedantic: false, renderer: null, silent: false, tokenizer: null, walkTokens: null };
@@ -2223,241 +2638,138 @@ function createDOMPurify() {
 }
 var purify = createDOMPurify();
 
-// src/model.js
-var copy = (value) => structuredClone(value);
-var compare = (a, b2) => a.start - b2.start || a.end - b2.end || (a.id < b2.id ? -1 : a.id > b2.id ? 1 : 0);
-var requiredString = (value) => typeof value === "string" && value.trim().length > 0;
-function validateOptions({ document: document2, labels }) {
-  if (!document2 || !requiredString(document2.id) || !requiredString(document2.version)) throw new Error("Document ID and immutable version are required.");
-  if (!Array.isArray(labels) || labels.length !== 2 || labels.some((l) => !l || !requiredString(l.id) || !requiredString(l.name))) throw new Error("Exactly two labels with IDs and names are required.");
-  if (new Set(labels.map((l) => l.id)).size !== 2 || new Set(labels.map((l) => l.direction)).size !== 2 || labels.some((l) => !["left", "right"].includes(l.direction))) throw new Error("Labels need distinct IDs and one left/right assignment each.");
+// src/render.js
+var TAGS = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "em", "strong", "a", "ul", "ol", "li", "blockquote", "pre", "code", "br", "hr", "del"];
+var BLOCK_SELECTOR = "p,h1,h2,h3,h4,h5,h6,li,pre";
+function element(tag, className, text2) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text2 !== void 0) node.textContent = text2;
+  return node;
 }
-var ReviewSession = class {
-  #annotations = [];
-  #pending = null;
-  #activeId = null;
-  #undo = [];
-  #redo = [];
-  #document;
-  #labels;
-  #emit;
-  #revision = 0;
-  constructor({ document: document2, labels, text: text2 }, onEvent = () => {
-  }) {
-    validateOptions({ document: document2, labels });
-    if (typeof text2 !== "string") throw new Error("Canonical text must be a string.");
-    this.#document = { id: document2.id, version: document2.version, text: text2, canonicalFormat: "review-text-v1", offsetUnit: "utf-16", endExclusive: true };
-    this.#labels = labels.map(({ id, name, direction }) => ({ id, name, direction }));
-    this.#emit = (name, detail) => onEvent(name, copy(detail));
+function selectableBlock(target) {
+  return target.closest("li,pre") ?? target.closest(BLOCK_SELECTOR);
+}
+function renderMarkdown(surface, markdown) {
+  const html2 = g.parse(markdown, { gfm: false });
+  surface.innerHTML = purify.sanitize(html2, { ALLOWED_TAGS: TAGS, ALLOWED_ATTR: ["href", "title", "start"], ALLOW_DATA_ATTR: false });
+  const blocks = [...surface.querySelectorAll(BLOCK_SELECTOR)].filter((block) => selectableBlock(block) === block);
+  for (const block of blocks) {
+    block.tabIndex = -1;
   }
-  get pending() {
-    return copy(this.#pending);
-  }
-  get activeId() {
-    return this.#activeId;
-  }
-  get text() {
-    return this.#document.text;
-  }
-  get labels() {
-    return copy(this.#labels);
-  }
-  get revision() {
-    return this.#revision;
-  }
-  read() {
-    return copy([...this.#annotations].sort(compare));
-  }
-  anchor(start, end) {
-    const text2 = this.text;
-    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > text2.length || start >= end) throw new Error("Selection needs a nonempty in-document integer range.");
-    return { start, end, quote: text2.slice(start, end), prefix: text2.slice(Math.max(0, start - 32), start), suffix: text2.slice(end, end + 32) };
-  }
-  select(start, end) {
-    const pending = this.anchor(start, end);
-    this.#pending = pending;
-    this.#activeId = null;
-    this.#emit("selection", pending);
-    return copy(pending);
-  }
-  clear() {
-    this.#pending = null;
-    this.#activeId = null;
-    this.#emit("selection", null);
-  }
-  activate(id) {
-    if (!this.#annotations.some((a) => a.id === id)) throw new Error("Unknown annotation ID.");
-    this.#pending = null;
-    this.#activeId = id;
-    this.#emit("selection", { annotationId: id });
-  }
-  #commit(next) {
-    const previous = this.#annotations;
-    this.#undo.push(copy(previous));
-    this.#redo = [];
-    this.#annotations = next;
-    this.#revision++;
-    this.#changes(previous, next);
-  }
-  #changes(previous, next) {
-    for (const a of previous) if (!next.some((b2) => b2.id === a.id)) this.#emit("delete", a);
-    for (const a of next) {
-      const old = previous.find((b2) => b2.id === a.id);
-      if (!old) this.#emit("create", a);
-      else if (old.labelId !== a.labelId) this.#emit("update", a);
-    }
-  }
-  classify(labelId) {
-    if (!this.#labels.some((l) => l.id === labelId)) throw new Error("Unknown label ID.");
-    if (this.#pending) {
-      const annotation = { id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...this.#pending };
-      this.#pending = null;
-      this.#activeId = null;
-      this.#commit([...this.#annotations, annotation]);
-      this.clear();
-      return copy(annotation);
-    }
-    if (this.#activeId) return this.relabel(this.#activeId, labelId);
-    return null;
-  }
-  relabel(id, labelId) {
-    const target = this.#annotations.find((a) => a.id === id);
-    if (!target) throw new Error("Unknown annotation ID.");
-    if (!this.#labels.some((l) => l.id === labelId)) throw new Error("Unknown label ID.");
-    if (target.labelId === labelId) return copy(target);
-    this.#commit(this.#annotations.map((a) => a.id === id ? { ...a, labelId } : a));
-    return copy(this.#annotations.find((a) => a.id === id));
-  }
-  delete(id) {
-    if (!this.#annotations.some((a) => a.id === id)) throw new Error("Unknown annotation ID.");
-    this.#commit(this.#annotations.filter((a) => a.id !== id));
-    if (this.#activeId === id) this.clear();
-  }
-  #travel(from, to) {
-    this.clear();
-    if (!from.length) return false;
-    const previous = this.#annotations;
-    to.push(copy(previous));
-    this.#annotations = from.pop();
-    this.#revision++;
-    this.#changes(previous, this.#annotations);
-    return true;
-  }
-  undo() {
-    return this.#travel(this.#undo, this.#redo);
-  }
-  redo() {
-    return this.#travel(this.#redo, this.#undo);
-  }
-  export(format = "grouped") {
-    if (!["grouped", "split"].includes(format)) throw new Error("Export format must be grouped or split.");
-    const base = { schemaVersion: 1, document: copy(this.#document), labels: this.labels };
-    const selections = Object.fromEntries(this.#labels.map((l) => [l.id, this.read().filter((a) => a.labelId === l.id)]));
-    if (format === "split") return this.#labels.map((l) => ({ ...copy(base), selections: { [l.id]: selections[l.id] } }));
-    return { ...base, selections };
-  }
-  restore(input) {
-    const payloads = Array.isArray(input) ? input : [input];
-    if (payloads.length !== (Array.isArray(input) ? 2 : 1)) throw new Error("Restore needs a grouped payload or both split payloads.");
-    const annotations = [], groups = /* @__PURE__ */ new Set(), ids = /* @__PURE__ */ new Set();
-    for (const payload of payloads) {
-      if (!payload || payload.schemaVersion !== 1 || !payload.document || Object.entries(this.#document).some(([key, value]) => payload.document[key] !== value)) throw new Error("Restore document identity, version, canonical text, or format does not match.");
-      if (!Array.isArray(payload.labels) || payload.labels.length !== 2 || new Set(payload.labels.map((l) => l?.id)).size !== 2 || this.#labels.some((label) => !payload.labels.some((candidate) => candidate && ["id", "name", "direction"].every((key) => candidate[key] === label[key])))) throw new Error("Restore labels do not match this session.");
-      if (!payload.selections || typeof payload.selections !== "object" || Array.isArray(payload.selections)) throw new Error("Restore selections must be grouped by label ID.");
-      if (Array.isArray(input) && Object.keys(payload.selections).length !== 1) throw new Error("Each split payload must contain one label group.");
-      for (const [labelId, values] of Object.entries(payload.selections)) {
-        if (!this.#labels.some((l) => l.id === labelId) || groups.has(labelId) || !Array.isArray(values)) throw new Error("Invalid or duplicate restore label group.");
-        groups.add(labelId);
-        for (const a of values) {
-          if (!a || !requiredString(a.id) || ids.has(a.id) || a.labelId !== labelId || a.documentId !== this.#document.id || a.documentVersion !== this.#document.version) throw new Error("Invalid annotation identity, label, or duplicate ID.");
-          const anchor = this.anchor(a.start, a.end);
-          for (const field of ["quote", "prefix", "suffix"]) if (a[field] !== anchor[field]) throw new Error(`Annotation ${a.id}: ${field} does not match its positions.`);
-          ids.add(a.id);
-          annotations.push({ id: a.id, documentId: a.documentId, documentVersion: a.documentVersion, labelId, ...anchor });
-        }
-      }
-    }
-    if (groups.size !== 2) throw new Error("Restore must include both label groups, including empty groups.");
-    this.#annotations = annotations.sort(compare);
-    this.#revision++;
-    this.#undo = [];
-    this.#redo = [];
-    this.clear();
-  }
-};
-
-// src/text.js
-var BLOCKS = /* @__PURE__ */ new Set(["P", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "BLOCKQUOTE", "PRE"]);
-function canonicalText(root) {
-  const segments = [];
-  let text2 = "";
-  const append = (value, node, kind = "text") => {
-    if (!value) return;
-    segments.push({ node, kind, start: text2.length, end: text2.length + value.length });
-    text2 += value;
+  return blocks;
+}
+function highlightNames(token) {
+  return {
+    left: `${token}-left`,
+    right: `${token}-right`,
+    pending: `${token}-pending`,
+    active: `${token}-active`
   };
-  function walk(node) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const betweenBlocks = /^\s*$/.test(node.data) && [...node.parentElement.children].some((c) => BLOCKS.has(c.tagName) || ["UL", "OL"].includes(c.tagName));
-      if (!betweenBlocks) append(node.data, node);
-      return;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    if (node.tagName === "BR") {
-      append("\n", node, "br");
-      return;
-    }
-    for (const child of node.childNodes) walk(child);
-    if (BLOCKS.has(node.tagName) && segments.at(-1)?.kind !== "separator") append("\n", node, "separator");
+}
+function highlightStyle(names) {
+  return [
+    `::highlight(${names.left}) { background: var(--review-mark-left-bg); color: var(--review-mark-left-text); text-decoration: underline solid var(--review-mark-left-border) 2px; }`,
+    `::highlight(${names.right}) { background: var(--review-mark-right-bg); color: var(--review-mark-right-text); text-decoration: underline solid var(--review-mark-right-border) 2px; }`,
+    `::highlight(${names.pending}) { background: var(--review-mark-pending-bg); color: var(--review-mark-pending-text); text-decoration: underline solid var(--review-mark-pending-text) 1px; }`,
+    `::highlight(${names.active}) { background: var(--review-mark-active-bg); color: var(--review-mark-active-text); text-decoration: underline; }`
+  ].join(" ");
+}
+function paintHighlights({ names, text: text2, labels, annotations, pending, active }) {
+  for (const direction of ["left", "right"]) {
+    const label = labels.find((l) => l.direction === direction);
+    const ranges = annotations.filter((a) => a.labelId === label.id).map((a) => text2.range(a.start, a.end));
+    CSS.highlights.set(names[direction], new Highlight(...ranges));
   }
-  for (const node of root.childNodes) walk(node);
-  while (segments.at(-1)?.kind === "separator") text2 = text2.slice(0, segments.pop().start);
-  function boundary(segment, end) {
-    if (segment.kind === "text") return [segment.node, end ? segment.node.data.length : 0];
-    const parent = segment.node.parentNode;
-    const index = [...parent.childNodes].indexOf(segment.node);
-    return [parent, index + (segment.kind === "separator" || end ? 1 : 0)];
+  const pendingRanges = pending ? [text2.range(pending.start, pending.end)] : [];
+  CSS.highlights.set(names.pending, new Highlight(...pendingRanges));
+  const activeRanges = active ? [text2.range(active.start, active.end)] : [];
+  CSS.highlights.set(names.active, new Highlight(...activeRanges));
+}
+function renderSavedList({ list, count, labels, annotations, activeId }) {
+  count.textContent = `Annotations (${annotations.length})`;
+  list.replaceChildren();
+  for (const annotation of annotations) {
+    const label = labels.find((l) => l.id === annotation.labelId);
+    const button = element("button", "review-saved-item", `${label.name}: ${annotation.quote}`);
+    button.type = "button";
+    button.dataset.annotationId = annotation.id;
+    button.setAttribute("aria-pressed", String(activeId === annotation.id));
+    const item = element("li");
+    item.append(button);
+    list.append(item);
   }
-  function offset(node, position) {
-    if (node !== root && !root.contains(node)) throw new Error("Selection is outside the document.");
-    const direct = segments.find((s) => s.node === node && s.kind === "text");
-    if (direct) return direct.start + Math.min(position, node.data.length);
-    const point2 = document.createRange();
-    point2.setStart(node, position);
-    point2.collapse(true);
-    let result = 0;
-    for (const s of segments) {
-      const edge = document.createRange();
-      edge.setStart(...boundary(s, true));
-      edge.collapse(true);
-      if (edge.compareBoundaryPoints(Range.START_TO_START, point2) <= 0) result = s.end;
-      else break;
-    }
-    return result;
-  }
-  function point(position, end) {
-    if (position < 0 || position > text2.length) throw new Error("Text position is outside the document.");
-    const s = segments.find((s2) => s2.kind === "text" && (end ? position > s2.start && position <= s2.end : position >= s2.start && position < s2.end));
-    if (s) return [s.node, position - s.start];
-    const next = segments.find((s2) => s2.start >= position && s2.kind === "text");
-    if (!end && next) return [next.node, 0];
-    const previous = segments.filter((s2) => s2.end <= position && s2.kind === "text").at(-1);
-    if (previous) return [previous.node, previous.node.data.length];
-    return next ? [next.node, 0] : [root, 0];
+}
+
+// src/dialogs.js
+function moveFocusWithArrows(modal, event) {
+  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+  const buttons = [...modal.querySelectorAll("button")];
+  const index = buttons.indexOf(document.activeElement);
+  const step = event.key === "ArrowDown" ? 1 : -1;
+  buttons[(index + step + buttons.length) % buttons.length].focus();
+  event.preventDefault();
+}
+function createDialogs(root, idPrefix, isDestroyed) {
+  let current = null;
+  function open(title, content) {
+    if (current) return null;
+    const previousFocus = document.activeElement;
+    const modal = element("dialog", "review-dialog");
+    const heading = element("h2", "", title);
+    heading.id = `${idPrefix}-dialog-title`;
+    modal.setAttribute("aria-labelledby", heading.id);
+    modal.append(heading, content);
+    const dismiss = element("button", "", "Cancel");
+    dismiss.type = "button";
+    dismiss.addEventListener("click", () => modal.close("cancel"));
+    modal.append(dismiss);
+    root.append(modal);
+    current = modal;
+    modal.addEventListener("close", () => {
+      current = null;
+      modal.remove();
+      if (!isDestroyed() && previousFocus?.isConnected) previousFocus.focus();
+    }, { once: true });
+    modal.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      modal.close("cancel");
+    });
+    modal.addEventListener("keydown", (event) => moveFocusWithArrows(modal, event));
+    modal.showModal();
+    modal.querySelector("button")?.focus();
+    return modal;
   }
   return {
-    text: text2,
-    offset,
-    range(start, end) {
-      const range = document.createRange();
-      range.setStart(...point(start, false));
-      range.setEnd(...point(end, true));
-      return range;
+    open,
+    close(value) {
+      current?.close(value);
     },
-    fromRange(range) {
-      return { start: offset(range.startContainer, range.startOffset), end: offset(range.endContainer, range.endOffset) };
+    get isOpen() {
+      return current !== null;
     }
   };
+}
+function choiceList(choices) {
+  const content = element("div", "review-choices");
+  for (const { title, onChoose } of choices) {
+    const button = element("button", "", title);
+    button.type = "button";
+    button.addEventListener("click", onChoose);
+    content.append(button);
+  }
+  return content;
+}
+function shortcutHelp(display) {
+  const content = element("dl", "review-shortcuts");
+  for (const [command, keys] of Object.entries(display)) {
+    content.append(element("dt", "", command), element("dd", "", keys.join(" / ")));
+  }
+  content.append(
+    element("dt", "", "Native selection"),
+    element("dd", "", "Tab / Shift+Tab: normal focus. In F2 mode: arrows move; Shift+arrows select; Ctrl+Shift+Left/Right (Windows/Linux) or Alt+Shift+Left/Right (macOS) extends by word.")
+  );
+  return content;
 }
 
 // src/gesture.js
@@ -2466,165 +2778,129 @@ function swipeDirection(dx, dy) {
   return null;
 }
 
-// src/styles.js
-var tokens = {
-  background: ["--review-panel", "background-color", "light-dark(#fffefa, #1c201f)"],
-  surfaceBackground: ["--review-subtle", "background-color", "light-dark(#f1f4ef, #282f2b)"],
-  toolbarBackground: ["--review-toolbar-bg", "background-color", "light-dark(#f8f9f5, #202623)"],
-  textColor: ["--review-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  mutedColor: ["--review-muted", "color", "light-dark(#626e68, #a5b3ac)"],
-  borderColor: ["--review-border", "border-color", "light-dark(#dce2dc, #3b4640)"],
-  focusColor: ["--review-focus", "color", "light-dark(#315da5, #98baff)"],
-  linkColor: ["--review-link", "color", "light-dark(#226453, #a0d7bd)"],
-  codeBackground: ["--review-code", "background-color", "light-dark(#f1f4ef, #282f2b)"],
-  buttonBackground: ["--review-button-bg", "background-color", "transparent"],
-  buttonTextColor: ["--review-button-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  buttonHoverBackground: ["--review-button-hover", "background-color", "light-dark(#f1f4ef, #282f2b)"],
-  buttonBorderColor: ["--review-button-border", "border-color", "transparent"],
-  primaryBackground: ["--review-primary", "background-color", "light-dark(#263f35, #c8dfd0)"],
-  primaryHoverBackground: ["--review-primary-hover", "background-color", "light-dark(#263f35, #c8dfd0)"],
-  primaryTextColor: ["--review-on-primary", "color", "light-dark(#fffefa, #192c22)"],
-  leftBackground: ["--review-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
-  leftTextColor: ["--review-left-text", "color", "light-dark(#226453, #a0d7bd)"],
-  leftBorderColor: ["--review-left-border", "border-color", "transparent"],
-  rightBackground: ["--review-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
-  rightTextColor: ["--review-right-text", "color", "light-dark(#885634, #e7ba92)"],
-  rightBorderColor: ["--review-right-border", "border-color", "transparent"],
-  activeBackground: ["--review-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
-  activeTextColor: ["--review-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  activeBorderColor: ["--review-active-border", "border-color", "light-dark(#74826f, #a5b3ac)"],
-  highlightLeftBackground: ["--review-mark-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
-  highlightLeftTextColor: ["--review-mark-left-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  highlightLeftBorderColor: ["--review-mark-left-border", "color", "light-dark(#226453, #a0d7bd)"],
-  highlightRightBackground: ["--review-mark-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
-  highlightRightTextColor: ["--review-mark-right-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  highlightRightBorderColor: ["--review-mark-right-border", "color", "light-dark(#885634, #e7ba92)"],
-  highlightPendingBackground: ["--review-mark-pending-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
-  highlightPendingTextColor: ["--review-mark-pending-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  highlightActiveBackground: ["--review-mark-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
-  highlightActiveTextColor: ["--review-mark-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  backdropColor: ["--review-backdrop", "color", "light-dark(#15271d55, #00000099)"],
-  shadowColor: ["--review-shadow", "color", "light-dark(#1c302012, #00000033)"],
-  boxShadow: ["--review-box-shadow", "box-shadow", "0 8px 28px light-dark(#1c302012, #00000033)"],
-  fontFamily: ["--review-font-family", "font-family", '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'],
-  fontSize: ["--review-font-size", "font-size", "14px"],
-  lineHeight: ["--review-line-height", "line-height", "1.65"],
-  documentFontFamily: ["--review-document-font", "font-family", '"Iowan Old Style", "Palatino Linotype", Georgia, serif'],
-  documentFontSize: ["--review-document-size", "font-size", "16px"],
-  documentLineHeight: ["--review-document-line-height", "line-height", "1.85"],
-  headingFontFamily: ["--review-heading-font", "font-family", "system-ui, sans-serif"],
-  headingFontSize: ["--review-heading-size", "font-size", "27px"],
-  headingLineHeight: ["--review-heading-line-height", "line-height", "1.3"],
-  headingLetterSpacing: ["--review-heading-spacing", "letter-spacing", "-.025em"],
-  codeFontFamily: ["--review-code-font", "font-family", "ui-monospace, SFMono-Regular, monospace"],
-  codeFontSize: ["--review-code-size", "font-size", "12px"],
-  codeLineHeight: ["--review-code-line-height", "line-height", "1.8"],
-  smallFontSize: ["--review-small-size", "font-size", "12px"],
-  buttonFontSize: ["--review-button-size", "font-size", "12px"],
-  borderWidth: ["--review-border-width", "border-top-width", "1px"],
-  borderRadius: ["--review-radius", "border-radius", "12px"],
-  buttonBorderWidth: ["--review-button-border-width", "border-top-width", "1px"],
-  buttonRadius: ["--review-button-radius", "border-radius", "6px"],
-  codeRadius: ["--review-code-radius", "border-radius", "7px"],
-  dialogRadius: ["--review-dialog-radius", "border-radius", "12px"],
-  focusWidth: ["--review-focus-width", "outline-width", "3px"],
-  focusOffset: ["--review-focus-offset", "outline-offset", "3px"],
-  documentPadding: ["--review-document-padding", "padding", "36px 38px 26px"],
-  narrowDocumentPadding: ["--review-narrow-document-padding", "padding", "28px 22px 24px"],
-  toolbarPadding: ["--review-toolbar-padding", "padding", "9px 18px"],
-  toolbarGap: ["--review-toolbar-gap", "gap", "8px"],
-  buttonPadding: ["--review-button-padding", "padding", "7px 9px"],
-  paragraphSpacing: ["--review-paragraph-spacing", "margin-bottom", "24px"],
-  codePadding: ["--review-code-padding", "padding", "16px 18px"],
-  dialogPadding: ["--review-dialog-padding", "padding", "22px"],
-  sidebarPadding: ["--review-sidebar-padding", "padding", "16px"],
-  statusPadding: ["--review-status-padding", "padding", "12px 18px"],
-  colorScheme: ["color-scheme", "color-scheme", "inherit"]
-};
-var defaultReviewStyles = Object.freeze(Object.fromEntries(Object.entries(tokens).map(([name, [, , value]]) => [name, value])));
-function resolveReviewStyles(overrides = {}) {
-  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides) || ![Object.prototype, null].includes(Object.getPrototypeOf(overrides))) throw new Error("Styles must be a map of named CSS values.");
-  for (const [name, value] of Object.entries(overrides)) {
-    if (!Object.hasOwn(tokens, name)) throw new Error(`Unknown style: ${name}`);
-    if (typeof value !== "string" || !value.trim()) throw new Error(`Style ${name} must be a nonempty CSS string.`);
-    if (name === "colorScheme" && !["inherit", "light", "dark"].includes(value.trim())) throw new Error("Style colorScheme must be inherit, light or dark.");
-    if (name !== "colorScheme" && /^(inherit|initial|unset|revert|revert-layer)$/i.test(value.trim())) throw new Error(`Style ${name} cannot use a CSS reset keyword.`);
+// src/pointer.js
+function installPointerInput(ctx) {
+  const { surface, root, text: text2, state, left, right, listen, safe } = ctx;
+  let gesture = null;
+  function pointAt(x2, y2) {
+    const point = document.caretPositionFromPoint?.(x2, y2);
+    if (point && surface.contains(point.offsetNode)) return text2.offset(point.offsetNode, point.offset);
+    const range = document.caretRangeFromPoint?.(x2, y2);
+    if (range && surface.contains(range.startContainer)) return text2.offset(range.startContainer, range.startOffset);
+    return null;
   }
-  return { ...defaultReviewStyles, ...overrides };
-}
-function applyReviewStyles(root, overrides) {
-  const styles = resolveReviewStyles(overrides);
-  for (const [name, value] of Object.entries(styles)) if (!CSS.supports(tokens[name][1], value)) throw new Error(`Invalid CSS value for style ${name}: ${value}`);
-  for (const [name, value] of Object.entries(styles)) root.style.setProperty(tokens[name][0], value);
+  function hitRange(anchor, x2, y2) {
+    const rectangles = [...text2.range(anchor.start, anchor.end).getClientRects()];
+    return rectangles.some((r) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom);
+  }
+  function cancel() {
+    gesture?.preview?.remove();
+    if (gesture?.swipe && surface.hasPointerCapture?.(gesture.id)) surface.releasePointerCapture(gesture.id);
+    gesture = null;
+  }
+  listen(surface, "pointerdown", (event) => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    const pending = state.pending;
+    const swipe = !!pending && hitRange(pending, event.clientX, event.clientY);
+    gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, swipe, target: event.target };
+    if (!swipe) return;
+    event.preventDefault();
+    surface.setPointerCapture(event.pointerId);
+    const preview = element("div", "review-swipe-preview", pending.quote);
+    preview.setAttribute("aria-hidden", "true");
+    root.append(preview);
+    gesture.preview = preview;
+  });
+  listen(surface, "pointermove", (event) => {
+    if (!gesture?.swipe || gesture.id !== event.pointerId) return;
+    const dx = event.clientX - gesture.x;
+    const preview = gesture.preview;
+    preview.hidden = Math.abs(dx) < 8;
+    preview.textContent = `${dx < 0 ? left.name : right.name} \xB7 ${state.pending?.quote ?? ""}`;
+    preview.style.left = `${Math.max(8, Math.min(innerWidth - 280, event.clientX + 12))}px`;
+    preview.style.top = `${Math.max(8, Math.min(innerHeight - 100, event.clientY + 15))}px`;
+  });
+  listen(surface, "pointerup", (event) => safe(() => {
+    if (!gesture || gesture.id !== event.pointerId) return;
+    const current = gesture;
+    const dx = event.clientX - current.x;
+    const dy = event.clientY - current.y;
+    cancel();
+    if (current.swipe) {
+      const direction = swipeDirection(dx, dy);
+      if (direction) ctx.classify(direction === "left" ? left : right);
+      return;
+    }
+    if (ctx.nativeRange() || Math.hypot(dx, dy) > 4) {
+      ctx.syncSelection();
+      return;
+    }
+    const at = pointAt(event.clientX, event.clientY);
+    const saved = at === null ? [] : state.read().filter((a) => at >= a.start && at < a.end && hitRange(a, event.clientX, event.clientY));
+    ctx.resetNative();
+    ctx.exitPrecise();
+    if (saved.length > 1) {
+      ctx.chooseOverlap(saved);
+      return;
+    }
+    if (saved.length === 1) {
+      ctx.activate(saved[0].id);
+      return;
+    }
+    const block = selectableBlock(current.target);
+    if (block && surface.contains(block)) {
+      block.focus({ preventScroll: true });
+      ctx.selectBlock();
+      return;
+    }
+    state.clear();
+  }));
+  listen(surface, "pointercancel", cancel);
+  listen(surface, "lostpointercapture", cancel);
+  listen(document, "pointerup", (event) => {
+    if (!gesture || gesture.swipe || surface.contains(event.target)) return;
+    ctx.syncSelection();
+    cancel();
+  });
+  return {
+    cancel,
+    isSwiping() {
+      return !!gesture?.swipe;
+    }
+  };
 }
 
 // src/review.js
-var DEFAULT_SHORTCUTS = {
-  nextBlock: ["Alt+ArrowDown"],
-  previousBlock: ["Alt+ArrowUp"],
-  selectBlock: ["Enter"],
-  precise: ["F2"],
-  left: ["Alt+ArrowLeft"],
-  right: ["Alt+ArrowRight"],
-  clear: ["Escape"],
-  remove: ["Delete", "Backspace"],
-  nextAnnotation: ["Alt+N"],
-  previousAnnotation: ["Alt+P"],
-  undo: ["Mod+Z"],
-  redo: ["Mod+Shift+Z", "Ctrl+Y"],
-  export: ["Mod+Shift+E"],
-  finish: ["Mod+Enter"],
-  help: ["F1"]
-};
-var TAGS = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "em", "strong", "a", "ul", "ol", "li", "blockquote", "pre", "code", "br", "hr", "del"];
-var BLOCK_SELECTOR = "p,h1,h2,h3,h4,h5,h6,li,pre";
-function selectableBlock(target) {
-  return target.closest("li,pre") ?? target.closest(BLOCK_SELECTOR);
-}
-function element(tag, className, text2) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text2 !== void 0) node.textContent = text2;
-  return node;
-}
-function shortcutMap(overrides = {}) {
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const defaults = structuredClone(DEFAULT_SHORTCUTS);
-  if (mac) defaults.redo = ["Mod+Shift+Z"];
-  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) throw new Error("Shortcut overrides must be a command map.");
-  for (const [command, value] of Object.entries(overrides)) {
-    if (!Object.hasOwn(defaults, command)) throw new Error(`Unknown shortcut command: ${command}`);
-    const keys = typeof value === "string" ? [value] : value;
-    if (!Array.isArray(keys) || !keys.length || keys.some((k2) => typeof k2 !== "string" || !k2.trim())) throw new Error(`Invalid shortcut for ${command}.`);
-    defaults[command] = [...keys];
-  }
-  const normalize = (value) => {
-    const parts = value.toLowerCase().replaceAll("mod", mac ? "meta" : "ctrl").split("+");
-    const key = parts.pop();
-    if (!key || parts.some((p) => !["ctrl", "alt", "shift", "meta"].includes(p)) || new Set(parts).size !== parts.length) throw new Error(`Invalid shortcut: ${value}`);
-    return [...parts.sort(), key].join("+");
-  };
-  const bindings = /* @__PURE__ */ new Map();
-  for (const [command, values] of Object.entries(defaults)) for (const value of values) {
-    const key = normalize(value);
-    if (bindings.has(key)) throw new Error(`Shortcut conflict: ${value}`);
-    bindings.set(key, command);
-  }
-  const display = Object.fromEntries(Object.entries(defaults).map(([name, keys]) => [name, keys.map((key) => key.replace(/\bmod\b/gi, mac ? "Cmd" : "Ctrl").replace(/\bmeta\b/gi, mac ? "Cmd" : "Meta"))]));
-  return { effective: defaults, display, command(event) {
-    const modifiers = [];
-    if (event.ctrlKey) modifiers.push("ctrl");
-    if (event.altKey) modifiers.push("alt");
-    if (event.shiftKey) modifiers.push("shift");
-    if (event.metaKey) modifiers.push("meta");
-    return bindings.get([...modifiers.sort(), event.key.toLowerCase()].join("+"));
-  } };
-}
-function mountReview(container, options) {
+var TOOLBAR = [
+  ["left", null],
+  ["right", null],
+  ["clear", "Clear selection"],
+  ["remove", "Delete annotation"],
+  ["undo", "Undo"],
+  ["redo", "Redo"],
+  ["previousBlock", "Previous block"],
+  ["nextBlock", "Next block"],
+  ["selectBlock", "Select block"],
+  ["precise", "Precise selection"],
+  ["previousAnnotation", "Previous annotation"],
+  ["nextAnnotation", "Next annotation"],
+  ["export", "Export files"],
+  ["finish", "Done"],
+  ["help", "Shortcut help"]
+];
+var ARROW_KEYS = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+var READ_ONLY_MODE = "Read-only \xB7 F2 for precise keyboard selection";
+var PRECISE_MODE = "Precise selection \xB7 arrows move \xB7 Shift+arrows select \xB7 F2 keeps range \xB7 Escape cancels";
+function checkMountInput(container, options) {
   if (!(container instanceof HTMLElement)) throw new Error("Mount needs an HTML container.");
   validateOptions(options);
   if (typeof options.document.markdown !== "string") throw new Error("Markdown source must be a string.");
-  if (!globalThis.CSS?.highlights || !globalThis.Highlight || !getSelection()?.modify) throw new Error("This browser needs CSS Custom Highlight and Selection.modify support. Use a current desktop browser.");
+  if (!globalThis.CSS?.highlights || !globalThis.Highlight || !getSelection()?.modify) {
+    throw new Error("This browser needs CSS Custom Highlight and Selection.modify support. Use a current desktop browser.");
+  }
+}
+function mountReview(container, options) {
+  checkMountInput(container, options);
   const shortcuts = shortcutMap(options.shortcuts);
   const format = options.exportFormat ?? "grouped";
   if (!["grouped", "split"].includes(format)) throw new Error("Export format must be grouped or split.");
@@ -2638,9 +2914,7 @@ function mountReview(container, options) {
   const surface = element("article", "review-document");
   surface.tabIndex = 0;
   surface.setAttribute("aria-label", "Read-only document");
-  surface.innerHTML = purify.sanitize(g.parse(options.document.markdown, { gfm: false }), { ALLOWED_TAGS: TAGS, ALLOWED_ATTR: ["href", "title", "start"], ALLOW_DATA_ATTR: false });
-  const blocks = [...surface.querySelectorAll(BLOCK_SELECTOR)].filter((block) => selectableBlock(block) === block);
-  for (const block of blocks) block.tabIndex = -1;
+  const blocks = renderMarkdown(surface, options.document.markdown);
   const layout = element("div", "review-layout");
   const sidebar = element("aside", "review-saved");
   sidebar.setAttribute("aria-label", "Saved annotations");
@@ -2650,18 +2924,20 @@ function mountReview(container, options) {
   const status = element("p", "review-status", "Click a paragraph, heading, list item, or code block; or drag an exact range.");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  const mode = element("p", "review-mode", "Read-only \xB7 F2 for precise keyboard selection");
+  const mode = element("p", "review-mode", READ_ONLY_MODE);
   layout.append(surface, sidebar);
   root.append(toolbar, mode, layout, status);
   const token = `review-${crypto.randomUUID()}`;
-  const names = { left: `${token}-left`, right: `${token}-right`, pending: `${token}-pending`, active: `${token}-active` };
+  const names = highlightNames(token);
   const style = element("style");
-  style.textContent = `::highlight(${names.left}) { background: var(--review-mark-left-bg); color: var(--review-mark-left-text); text-decoration: underline solid var(--review-mark-left-border) 2px; } ::highlight(${names.right}) { background: var(--review-mark-right-bg); color: var(--review-mark-right-text); text-decoration: underline solid var(--review-mark-right-border) 2px; } ::highlight(${names.pending}) { background: var(--review-mark-pending-bg); color: var(--review-mark-pending-text); text-decoration: underline solid var(--review-mark-pending-text) 1px; } ::highlight(${names.active}) { background: var(--review-mark-active-bg); color: var(--review-mark-active-text); text-decoration: underline; }`;
+  style.textContent = highlightStyle(names);
   root.append(style);
   container.replaceChildren(root);
   const text2 = canonicalText(surface);
   const listeners = new AbortController();
-  let destroyed = false, precise = false, gesture = null, dialog = null, finishPromise = null;
+  let destroyed = false;
+  let precise = false;
+  let finishPromise = null;
   let focusedBlock = null;
   let initialized = false;
   const state = new ReviewSession({ ...options, text: text2.text }, (name, detail) => {
@@ -2670,7 +2946,9 @@ function mountReview(container, options) {
   });
   initialized = true;
   const labels = state.labels;
-  const left = labels.find((l) => l.direction === "left"), right = labels.find((l) => l.direction === "right");
+  const left = labels.find((l) => l.direction === "left");
+  const right = labels.find((l) => l.direction === "right");
+  const dialogs = createDialogs(root, token, () => destroyed);
   function guard() {
     if (destroyed) throw new Error("This annotator has been destroyed.");
   }
@@ -2693,32 +2971,19 @@ function mountReview(container, options) {
       return void 0;
     }
   }
+  function labelName(labelId) {
+    return labels.find((l) => l.id === labelId).name;
+  }
   function paint() {
     if (destroyed) return;
     const annotations = state.read();
-    for (const direction of ["left", "right"]) {
-      const label = labels.find((l) => l.direction === direction);
-      CSS.highlights.set(names[direction], new Highlight(...annotations.filter((a) => a.labelId === label.id).map((a) => text2.range(a.start, a.end))));
-    }
     const pending = state.pending;
-    CSS.highlights.set(names.pending, new Highlight(...pending ? [text2.range(pending.start, pending.end)] : []));
     const active = annotations.find((a) => a.id === state.activeId);
-    CSS.highlights.set(names.active, new Highlight(...active ? [text2.range(active.start, active.end)] : []));
-    count.textContent = `Annotations (${annotations.length})`;
-    list.replaceChildren();
-    for (const a of annotations) {
-      const item = element("li");
-      const label = labels.find((l) => l.id === a.labelId);
-      const button = element("button", "review-saved-item", `${label.name}: ${a.quote}`);
-      button.type = "button";
-      button.dataset.annotationId = a.id;
-      button.setAttribute("aria-pressed", String(state.activeId === a.id));
-      item.append(button);
-      list.append(item);
-    }
-    mode.textContent = precise ? "Precise selection \xB7 arrows move \xB7 Shift+arrows select \xB7 F2 keeps range \xB7 Escape cancels" : "Read-only \xB7 F2 for precise keyboard selection";
+    paintHighlights({ names, text: text2, labels, annotations, pending, active });
+    renderSavedList({ list, count, labels, annotations, activeId: state.activeId });
+    mode.textContent = precise ? PRECISE_MODE : READ_ONLY_MODE;
     if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
-    else if (active) announce(`Editing ${labels.find((l) => l.id === active.labelId).name}: ${active.quote.slice(0, 100)}`);
+    else if (active) announce(`Editing ${labelName(active.labelId)}: ${active.quote.slice(0, 100)}`);
   }
   function nativeRange() {
     const selection = getSelection();
@@ -2728,11 +2993,12 @@ function mountReview(container, options) {
     return range;
   }
   function syncSelection() {
-    if (destroyed || gesture?.swipe || dialog) return;
+    if (destroyed || pointer.isSwiping() || dialogs.isOpen) return;
     const range = nativeRange();
     if (!range) return;
     const { start, end } = text2.fromRange(range);
-    if (start < end && (state.pending?.start !== start || state.pending?.end !== end)) state.select(start, end);
+    const unchanged = state.pending?.start === start && state.pending?.end === end;
+    if (start < end && !unchanged) state.select(start, end);
   }
   function resetNative() {
     if (nativeRange()) getSelection().removeAllRanges();
@@ -2740,13 +3006,12 @@ function mountReview(container, options) {
   function classify(label) {
     syncSelection();
     const saved = state.classify(label.id);
-    if (saved) {
-      precise = false;
-      resetNative();
-      paint();
-      announce(`${label.name} assigned. ${state.read().length} saved annotations.`);
-    }
-    return !!saved;
+    if (!saved) return false;
+    precise = false;
+    resetNative();
+    paint();
+    announce(`${label.name} assigned. ${state.read().length} saved annotations.`);
+    return true;
   }
   function focusRange(annotation) {
     const range = text2.range(annotation.start, annotation.end);
@@ -2764,17 +3029,24 @@ function mountReview(container, options) {
     const annotations = state.read();
     if (!annotations.length) return false;
     const index = annotations.findIndex((a) => a.id === state.activeId);
-    activate(annotations[index < 0 ? delta > 0 ? 0 : annotations.length - 1 : (index + delta + annotations.length) % annotations.length].id);
+    let next;
+    if (index < 0) next = delta > 0 ? 0 : annotations.length - 1;
+    else next = (index + delta + annotations.length) % annotations.length;
+    activate(annotations[next].id);
     return true;
   }
   function moveBlock(delta) {
     if (!blocks.length) return false;
     const index = blocks.indexOf(focusedBlock);
-    blocks[Math.max(0, Math.min(blocks.length - 1, index < 0 ? delta > 0 ? 0 : blocks.length - 1 : index + delta))].focus();
+    let next;
+    if (index < 0) next = delta > 0 ? 0 : blocks.length - 1;
+    else next = Math.max(0, Math.min(blocks.length - 1, index + delta));
+    blocks[next].focus();
     return true;
   }
   function selectBlock() {
-    const block = surface.contains(document.activeElement) ? selectableBlock(document.activeElement) ?? focusedBlock : focusedBlock;
+    const focusedInside = surface.contains(document.activeElement);
+    const block = focusedInside ? selectableBlock(document.activeElement) ?? focusedBlock : focusedBlock;
     if (!block) return moveBlock(1);
     if (!(block instanceof HTMLElement) || !surface.contains(block) || !block.matches(BLOCK_SELECTOR)) return false;
     const range = document.createRange();
@@ -2808,109 +3080,70 @@ function mountReview(container, options) {
     paint();
     return true;
   }
-  function closeDialog(value) {
-    dialog?.close(value);
-  }
-  function openDialog(title, content) {
-    if (dialog) return null;
-    const previousFocus = document.activeElement;
-    const modal = element("dialog", "review-dialog");
-    const heading = element("h2", "", title);
-    heading.id = `${token}-dialog-title`;
-    modal.setAttribute("aria-labelledby", heading.id);
-    modal.append(heading, content);
-    const dismiss = element("button", "", "Cancel");
-    dismiss.type = "button";
-    dismiss.addEventListener("click", () => modal.close("cancel"));
-    modal.append(dismiss);
-    root.append(modal);
-    dialog = modal;
-    modal.addEventListener("close", () => {
-      dialog = null;
-      modal.remove();
-      if (!destroyed && previousFocus?.isConnected) previousFocus.focus();
-    }, { once: true });
-    modal.addEventListener("cancel", (event) => {
-      event.preventDefault();
-      modal.close("cancel");
-    });
-    modal.addEventListener("keydown", (event) => {
-      if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
-      const buttons = [...modal.querySelectorAll("button")];
-      const index = buttons.indexOf(document.activeElement);
-      buttons[(index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length].focus();
-      event.preventDefault();
-    });
-    modal.showModal();
-    modal.querySelector("button")?.focus();
-    return modal;
-  }
   function chooseOverlap(annotations) {
-    const content = element("div", "review-choices");
-    for (const a of annotations) {
-      const button = element("button", "", `${labels.find((l) => l.id === a.labelId).name}: ${a.quote}`);
-      button.type = "button";
-      button.addEventListener("click", () => {
+    const choices = annotations.map((a) => ({
+      title: `${labelName(a.labelId)}: ${a.quote}`,
+      onChoose: () => {
         state.activate(a.id);
-        closeDialog("selected");
-      });
-      content.append(button);
-    }
-    openDialog("Choose an annotation", content);
+        dialogs.close("selected");
+      }
+    }));
+    dialogs.open("Choose an annotation", choiceList(choices));
   }
   function showHelp() {
-    const content = element("dl", "review-shortcuts");
-    for (const [command2, keys] of Object.entries(shortcuts.display)) content.append(element("dt", "", command2), element("dd", "", keys.join(" / ")));
-    content.append(element("dt", "", "Native selection"), element("dd", "", "Tab / Shift+Tab: normal focus. In F2 mode: arrows move; Shift+arrows select; Ctrl+Shift+Left/Right (Windows/Linux) or Alt+Shift+Left/Right (macOS) extends by word."));
-    openDialog("Keyboard shortcuts", content);
+    dialogs.open("Keyboard shortcuts", shortcutHelp(shortcuts.display));
     return true;
+  }
+  async function resolvePending() {
+    const choices = [["left", left.name], ["right", right.name], ["discard", "Discard pending selection"]].map(([value, title]) => ({
+      title,
+      onChoose: () => dialogs.close(value)
+    }));
+    const modal = dialogs.open("Resolve pending selection", choiceList(choices));
+    if (!modal) return false;
+    const choice = await new Promise((resolve) => modal.addEventListener("close", () => resolve(modal.returnValue), { once: true }));
+    if (destroyed || !["left", "right", "discard"].includes(choice)) return false;
+    if (choice === "discard") {
+      state.clear();
+      resetNative();
+    } else {
+      classify(choice === "left" ? left : right);
+    }
+    return true;
+  }
+  async function runFinish() {
+    syncSelection();
+    if (state.pending && !await resolvePending()) return null;
+    const data = state.export(format);
+    const revision = state.revision;
+    try {
+      await options.onFinish?.(structuredClone(data));
+      if (!destroyed && (state.revision !== revision || state.pending)) {
+        throw new Error("The review changed while saving. Export again; all annotations are retained.");
+      }
+    } catch (err) {
+      error(err);
+      throw err;
+    }
+    if (destroyed) return null;
+    container.dispatchEvent(new CustomEvent("review:complete", { detail: structuredClone(data) }));
+    announce("Review complete. Annotations remain available for export or retry.");
+    return data;
   }
   async function finish() {
     guard();
     if (finishPromise) return finishPromise;
-    finishPromise = (async () => {
-      syncSelection();
-      if (state.pending) {
-        const content = element("div", "review-choices");
-        for (const [value, title] of [["left", left.name], ["right", right.name], ["discard", "Discard pending selection"]]) {
-          const button = element("button", "", title);
-          button.type = "button";
-          button.addEventListener("click", () => closeDialog(value));
-          content.append(button);
-        }
-        const modal = openDialog("Resolve pending selection", content);
-        if (!modal) return null;
-        const choice = await new Promise((resolve) => modal.addEventListener("close", () => resolve(modal.returnValue), { once: true }));
-        if (destroyed || !["left", "right", "discard"].includes(choice)) return null;
-        if (choice === "discard") {
-          state.clear();
-          resetNative();
-        } else classify(choice === "left" ? left : right);
-      }
-      const data = state.export(format);
-      const revision = state.revision;
-      try {
-        await options.onFinish?.(structuredClone(data));
-        if (!destroyed && (state.revision !== revision || state.pending)) throw new Error("The review changed while saving. Export again; all annotations are retained.");
-      } catch (err) {
-        error(err);
-        throw err;
-      }
-      if (destroyed) return null;
-      container.dispatchEvent(new CustomEvent("review:complete", { detail: structuredClone(data) }));
-      announce("Review complete. Annotations remain available for export or retry.");
-      return data;
-    })();
+    finishPromise = runFinish();
     try {
       return await finishPromise;
     } finally {
       finishPromise = null;
     }
   }
-  function command(name) {
-    guard();
-    if (name === "left" || name === "right") return classify(name === "left" ? left : right);
-    if (name === "clear") {
+  const commands = {
+    left: () => classify(left),
+    right: () => classify(right),
+    clear() {
       if (!precise && !state.pending && !state.activeId && !nativeRange()) return false;
       precise = false;
       state.clear();
@@ -2918,8 +3151,8 @@ function mountReview(container, options) {
       paint();
       announce("Selection cleared.");
       return true;
-    }
-    if (name === "remove") {
+    },
+    remove() {
       if (state.pending) {
         state.clear();
         resetNative();
@@ -2930,43 +3163,51 @@ function mountReview(container, options) {
         announce("Annotation deleted. Undo restores it.");
       }
       return true;
-    }
-    if (name === "undo" || name === "redo") {
-      const canceled = !!(precise || state.pending || state.activeId || nativeRange());
-      precise = false;
-      resetNative();
-      const changed = state[name]();
-      if (!canceled && !changed) return false;
-      surface.focus();
-      paint();
-      announce(name === "undo" ? "Undone." : "Redone.");
-      return true;
-    }
-    if (name === "nextBlock") return moveBlock(1);
-    if (name === "previousBlock") return moveBlock(-1);
-    if (name === "nextAnnotation") return navigateAnnotation(1);
-    if (name === "previousAnnotation") return navigateAnnotation(-1);
-    if (name === "selectBlock") return selectBlock();
-    if (name === "precise") return togglePrecise();
-    if (name === "help") return showHelp();
-    if (name === "finish") {
+    },
+    undo: () => travel("undo"),
+    redo: () => travel("redo"),
+    nextBlock: () => moveBlock(1),
+    previousBlock: () => moveBlock(-1),
+    nextAnnotation: () => navigateAnnotation(1),
+    previousAnnotation: () => navigateAnnotation(-1),
+    selectBlock,
+    precise: togglePrecise,
+    help: showHelp,
+    finish() {
       void finish().catch(() => {
       });
       return true;
-    }
-    if (name === "export") {
+    },
+    export() {
       container.dispatchEvent(new CustomEvent("review:export", { detail: state.export(format) }));
       announce("Export ready. Pending selection remains excluded.");
       return true;
     }
-    return false;
+  };
+  function travel(direction) {
+    const canceled = !!(precise || state.pending || state.activeId || nativeRange());
+    precise = false;
+    resetNative();
+    const changed = state[direction]();
+    if (!canceled && !changed) return false;
+    surface.focus();
+    paint();
+    announce(direction === "undo" ? "Undone." : "Redone.");
+    return true;
   }
-  for (const [name, title] of [["left", left.name], ["right", right.name], ["clear", "Clear selection"], ["remove", "Delete annotation"], ["undo", "Undo"], ["redo", "Redo"], ["previousBlock", "Previous block"], ["nextBlock", "Next block"], ["selectBlock", "Select block"], ["precise", "Precise selection"], ["previousAnnotation", "Previous annotation"], ["nextAnnotation", "Next annotation"], ["export", "Export files"], ["finish", "Done"], ["help", "Shortcut help"]]) {
+  function command(name) {
+    guard();
+    if (!Object.hasOwn(commands, name)) return false;
+    return commands[name]();
+  }
+  for (const [name, fixedTitle] of TOOLBAR) {
+    const title = fixedTitle ?? (name === "left" ? left.name : right.name);
     const button = element("button", `review-command review-${name}`, title);
     button.type = "button";
     button.dataset.command = name;
     button.title = `${title} (${shortcuts.display[name].join(" / ")})`;
-    button.setAttribute("aria-keyshortcuts", shortcuts.effective[name].join(" ").replace(/\bmod\b/gi, /Mac/.test(navigator.platform) ? "Meta" : "Control").replace(/\bctrl\b/gi, "Control"));
+    const aria = shortcuts.effective[name].join(" ").replace(/\bmod\b/gi, /Mac/.test(navigator.platform) ? "Meta" : "Control").replace(/\bctrl\b/gi, "Control");
+    button.setAttribute("aria-keyshortcuts", aria);
     toolbar.append(button);
   }
   listen(toolbar, "click", (event) => {
@@ -2988,116 +3229,67 @@ function mountReview(container, options) {
   listen(surface, "beforeinput", (event) => event.preventDefault());
   listen(surface, "paste", (event) => event.preventDefault());
   listen(surface, "cut", (event) => event.preventDefault());
-  function pointAt(x2, y2) {
-    const point = document.caretPositionFromPoint?.(x2, y2);
-    if (point && surface.contains(point.offsetNode)) return text2.offset(point.offsetNode, point.offset);
-    const range = document.caretRangeFromPoint?.(x2, y2);
-    if (range && surface.contains(range.startContainer)) return text2.offset(range.startContainer, range.startOffset);
-    return null;
-  }
-  function hitRange(anchor, x2, y2) {
-    return [...text2.range(anchor.start, anchor.end).getClientRects()].some((r) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom);
-  }
-  function cancelGesture() {
-    gesture?.preview?.remove();
-    if (gesture?.swipe && surface.hasPointerCapture?.(gesture.id)) surface.releasePointerCapture(gesture.id);
-    gesture = null;
-  }
-  listen(surface, "pointerdown", (event) => {
-    if (event.button !== 0 || !event.isPrimary) return;
-    const pending = state.pending;
-    const swipe = !!pending && hitRange(pending, event.clientX, event.clientY);
-    gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, swipe, target: event.target };
-    if (swipe) {
-      event.preventDefault();
-      surface.setPointerCapture(event.pointerId);
-      const preview = element("div", "review-swipe-preview", pending.quote);
-      preview.setAttribute("aria-hidden", "true");
-      root.append(preview);
-      gesture.preview = preview;
-    }
-  });
-  listen(surface, "pointermove", (event) => {
-    if (!gesture?.swipe || gesture.id !== event.pointerId) return;
-    const dx = event.clientX - gesture.x;
-    const preview = gesture.preview;
-    preview.hidden = Math.abs(dx) < 8;
-    preview.textContent = `${dx < 0 ? left.name : right.name} \xB7 ${state.pending?.quote ?? ""}`;
-    preview.style.left = `${Math.max(8, Math.min(innerWidth - 280, event.clientX + 12))}px`;
-    preview.style.top = `${Math.max(8, Math.min(innerHeight - 100, event.clientY + 15))}px`;
-  });
-  listen(surface, "pointerup", (event) => safe(() => {
-    if (!gesture || gesture.id !== event.pointerId) return;
-    const current = gesture;
-    const dx = event.clientX - current.x, dy = event.clientY - current.y;
-    cancelGesture();
-    if (current.swipe) {
-      const direction = swipeDirection(dx, dy);
-      if (direction) classify(direction === "left" ? left : right);
-      return;
-    }
-    if (nativeRange() || Math.hypot(dx, dy) > 4) {
-      syncSelection();
-      return;
-    }
-    const at = pointAt(event.clientX, event.clientY);
-    const saved = at === null ? [] : state.read().filter((a) => at >= a.start && at < a.end && hitRange(a, event.clientX, event.clientY));
-    resetNative();
-    precise = false;
-    if (saved.length > 1) {
-      chooseOverlap(saved);
-      return;
-    }
-    if (saved.length === 1) {
-      activate(saved[0].id);
-      return;
-    }
-    const block = selectableBlock(current.target);
-    if (block && surface.contains(block)) {
-      block.focus({ preventScroll: true });
-      selectBlock();
-    } else state.clear();
-  }));
-  listen(surface, "pointercancel", cancelGesture);
-  listen(surface, "lostpointercapture", cancelGesture);
-  listen(document, "pointerup", (event) => {
-    if (gesture && !gesture.swipe && !surface.contains(event.target)) {
-      syncSelection();
-      cancelGesture();
-    }
+  const pointer = installPointerInput({
+    surface,
+    root,
+    text: text2,
+    state,
+    left,
+    right,
+    listen,
+    safe,
+    classify,
+    syncSelection,
+    nativeRange,
+    resetNative,
+    exitPrecise() {
+      precise = false;
+    },
+    chooseOverlap,
+    activate,
+    selectBlock
   });
   listen(document, "pointerdown", (event) => {
-    if (!root.contains(event.target)) {
-      state.clear();
-      precise = false;
-      cancelGesture();
-    }
+    if (root.contains(event.target)) return;
+    state.clear();
+    precise = false;
+    pointer.cancel();
   });
-  listen(root, "keydown", (event) => {
-    if (event.isComposing || event.target.isContentEditable || event.target.closest("input,textarea,select")) return;
-    if (dialog) return;
-    if (event.key === "Escape" && gesture?.swipe) {
-      event.preventDefault();
-      cancelGesture();
+  function movePreciseCaret(event) {
+    event.preventDefault();
+    const selection = getSelection();
+    const previous = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
+    const byWord = /Mac/.test(navigator.platform) ? event.altKey : event.ctrlKey;
+    const granularity = byWord ? "word" : vertical ? "line" : "character";
+    selection.modify(event.shiftKey ? "extend" : "move", backward ? "backward" : "forward", granularity);
+    const escaped = !surface.contains(selection.anchorNode) || !surface.contains(selection.focusNode);
+    if (escaped && previous) {
+      selection.removeAllRanges();
+      selection.addRange(previous);
+    }
+    if (selection.isCollapsed) {
+      state.clear();
       return;
     }
-    if (precise && surface.contains(event.target) && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+    safe(syncSelection);
+  }
+  listen(root, "keydown", (event) => {
+    if (event.isComposing || event.target.isContentEditable || event.target.closest("input,textarea,select")) return;
+    if (dialogs.isOpen) return;
+    if (event.key === "Escape" && pointer.isSwiping()) {
       event.preventDefault();
-      const selection = getSelection();
-      const old = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-      const backward = ["ArrowLeft", "ArrowUp"].includes(event.key);
-      const word = /Mac/.test(navigator.platform) ? event.altKey : event.ctrlKey;
-      selection.modify(event.shiftKey ? "extend" : "move", backward ? "backward" : "forward", word ? "word" : ["ArrowUp", "ArrowDown"].includes(event.key) ? "line" : "character");
-      if ((!surface.contains(selection.anchorNode) || !surface.contains(selection.focusNode)) && old) {
-        selection.removeAllRanges();
-        selection.addRange(old);
-      }
-      if (selection.isCollapsed) state.clear();
-      else safe(syncSelection);
+      pointer.cancel();
+      return;
+    }
+    if (precise && surface.contains(event.target) && ARROW_KEYS.includes(event.key)) {
+      movePreciseCaret(event);
       return;
     }
     const name = shortcuts.command(event);
-    if (!name || name === "selectBlock" && event.target.closest("button,a")) return;
+    if (!name) return;
+    if (name === "selectBlock" && event.target.closest("button,a")) return;
     if (safe(() => command(name))) event.preventDefault();
   });
   paint();
@@ -3157,8 +3349,8 @@ function mountReview(container, options) {
       if (destroyed) return;
       destroyed = true;
       listeners.abort();
-      cancelGesture();
-      dialog?.close("cancel");
+      pointer.cancel();
+      dialogs.close("cancel");
       for (const name of Object.values(names)) CSS.highlights.delete(name);
       if (nativeRange()) getSelection().removeAllRanges();
       container.replaceChildren(...original);
