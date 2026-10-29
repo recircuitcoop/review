@@ -112,9 +112,8 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review .review-finish { flex: none; min-width: 60px; padding: 8px 14px; font-weight: 500; background: var(--review-primary); color: var(--review-on-primary); border-color: var(--review-primary); }
 .review .review-finish:hover { background: var(--review-primary-hover); }
 /* Whisper: passive state row below the target passage. Generated text only, never a click target. */
-.review-whisper { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 24px; margin: -10px 0 26px; font-family: var(--review-font-family); font-size: var(--review-small-size); line-height: var(--review-line-height); color: var(--review-muted); pointer-events: none; }
+.review-whisper { position: absolute; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 24px; margin: 0; font-family: var(--review-font-family); font-size: var(--review-small-size); line-height: var(--review-line-height); color: var(--review-muted); pointer-events: none; }
 .review-whisper [data-text]::before { content: attr(data-text); }
-.review-document li > .review-whisper { margin: 2px 0 8px; }
 .review-whisper-state { text-align: center; white-space: pre; letter-spacing: -.01em; }
 .review-whisper-end { min-width: 0; overflow-wrap: anywhere; }
 .review-whisper-end[data-end="right"] { text-align: right; }
@@ -123,7 +122,7 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review-whisper-checked[data-end="right"], .review-whisper[data-assigned="right"] .review-whisper-status { color: var(--review-right-text); }
 .review-whisper:not([data-assigned=""]) .review-whisper-status { font-weight: 500; }
 @container (max-width: 500px) { .review-whisper { align-items: start; } .review-whisper-hint { display: none; } }
-.review-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
+.review-layout { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
 .review-document { font-family: var(--review-document-font); font-size: var(--review-document-size); line-height: var(--review-document-line-height); padding: var(--review-document-padding); min-height: 25rem; overflow-wrap: anywhere; }
 .review-document :is(h1, h2, h3, h4, h5, h6) { font-family: var(--review-heading-font); letter-spacing: var(--review-heading-spacing); line-height: var(--review-heading-line-height); }
 .review-document h1 { font-size: var(--review-heading-size); }

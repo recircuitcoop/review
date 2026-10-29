@@ -2,7 +2,7 @@ import { ReviewSession, validateOptions } from './model.js';
 import { canonicalText } from './text.js';
 import { applyReviewStyles } from './styles.js';
 import { shortcutMap } from './shortcuts.js';
-import { BLOCK_SELECTOR, element, highlightNames, highlightStyle, icon, paintHighlights, paintWhisper, renderMarkdown, renderSavedList, selectableBlock } from './render.js';
+import { BLOCK_SELECTOR, element, highlightNames, highlightStyle, icon, paintHighlights, paintWhisper, renderMarkdown, renderSavedList, repositionWhisper, selectableBlock } from './render.js';
 import { choiceList, createDialogs, shortcutHelp } from './dialogs.js';
 import { installPointerInput } from './pointer.js';
 export { defaultReviewStyles } from './styles.js';
@@ -85,9 +85,8 @@ export function mountReview(container, options) {
   status.setAttribute('aria-live', 'polite');
   layout.append(surface, sidebar);
   root.append(navbar, layout, status);
-  // Placed inside the document below the target passage. Its words are CSS generated
-  // content (data-text), so it adds no text nodes: canonical text, native selection and
-  // caret movement pass straight over it.
+  // An overlay laid below the target passage, outside the document so caret movement and
+  // selection never enter it. Its words are CSS generated content (data-text).
   const whisper = element('div', 'review-whisper');
   whisper.hidden = true;
   const whisperState = element('span', 'review-whisper-state');
@@ -97,7 +96,7 @@ export function mountReview(container, options) {
   const whisperRight = element('span', 'review-whisper-end');
   whisperRight.dataset.end = 'right';
   whisper.append(whisperLeft, whisperState, whisperRight);
-  surface.append(whisper);
+  layout.append(whisper);
   const names = highlightNames(token);
   const style = element('style');
   style.textContent = highlightStyle(names);
@@ -165,10 +164,34 @@ export function mountReview(container, options) {
     const active = annotations.find(a => a.id === state.activeId);
     paintHighlights({ names, text, labels, annotations, pending, active });
     renderSavedList({ list, count, labels, annotations, activeId: state.activeId });
-    paintWhisper({ whisper, surface, text, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded });
+    paintWhisperNow();
     if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
     else if (active) announce(`Editing ${labelName(active.labelId)}: ${active.quote.slice(0, 100)}`);
   }
+
+  function paintWhisperNow() {
+    const annotations = state.read();
+    const active = annotations.find(a => a.id === state.activeId);
+    paintWhisper({ whisper, layout, surface, text, labels, annotations, pending: state.pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded, held: pointerHeld });
+  }
+  // A pointer press holds the whisper in place until release; then it follows the new target.
+  let pointerHeld = false;
+  function releasePointer() {
+    if (!pointerHeld) return;
+    pointerHeld = false;
+    if (!destroyed) safe(paintWhisperNow);
+  }
+  listen(surface, 'pointerdown', () => {
+    pointerHeld = true;
+  });
+  listen(document, 'pointerup', releasePointer);
+  listen(document, 'pointercancel', releasePointer);
+
+  // Reflow moves blocks, so the overlay follows; its own margin change settles in one pass.
+  const reflow = new ResizeObserver(() => {
+    if (!destroyed) repositionWhisper(whisper, layout);
+  });
+  reflow.observe(surface);
 
   // --- Native selection ---------------------------------------------------
   /** The browser selection, only when it is a nonempty range inside the document surface. */
@@ -598,6 +621,7 @@ export function mountReview(container, options) {
       if (destroyed) return;
       destroyed = true;
       listeners.abort();
+      reflow.disconnect();
       dialogs.close('cancel');
       for (const name of Object.values(names)) CSS.highlights.delete(name);
       if (nativeRange()) getSelection().removeAllRanges();

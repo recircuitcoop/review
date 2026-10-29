@@ -118,9 +118,8 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review .review-finish { flex: none; min-width: 60px; padding: 8px 14px; font-weight: 500; background: var(--review-primary); color: var(--review-on-primary); border-color: var(--review-primary); }
 .review .review-finish:hover { background: var(--review-primary-hover); }
 /* Whisper: passive state row below the target passage. Generated text only, never a click target. */
-.review-whisper { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 24px; margin: -10px 0 26px; font-family: var(--review-font-family); font-size: var(--review-small-size); line-height: var(--review-line-height); color: var(--review-muted); pointer-events: none; }
+.review-whisper { position: absolute; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 24px; margin: 0; font-family: var(--review-font-family); font-size: var(--review-small-size); line-height: var(--review-line-height); color: var(--review-muted); pointer-events: none; }
 .review-whisper [data-text]::before { content: attr(data-text); }
-.review-document li > .review-whisper { margin: 2px 0 8px; }
 .review-whisper-state { text-align: center; white-space: pre; letter-spacing: -.01em; }
 .review-whisper-end { min-width: 0; overflow-wrap: anywhere; }
 .review-whisper-end[data-end="right"] { text-align: right; }
@@ -129,7 +128,7 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review-whisper-checked[data-end="right"], .review-whisper[data-assigned="right"] .review-whisper-status { color: var(--review-right-text); }
 .review-whisper:not([data-assigned=""]) .review-whisper-status { font-weight: 500; }
 @container (max-width: 500px) { .review-whisper { align-items: start; } .review-whisper-hint { display: none; } }
-.review-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
+.review-layout { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
 .review-document { font-family: var(--review-document-font); font-size: var(--review-document-size); line-height: var(--review-document-line-height); padding: var(--review-document-padding); min-height: 25rem; overflow-wrap: anywhere; }
 .review-document :is(h1, h2, h3, h4, h5, h6) { font-family: var(--review-heading-font); letter-spacing: var(--review-heading-spacing); line-height: var(--review-heading-line-height); }
 .review-document h1 { font-size: var(--review-heading-size); }
@@ -2943,19 +2942,29 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     holder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`;
     return holder.firstChild;
   }
-  function placeWhisper(whisper, surface, anchor) {
-    const block = anchor ? selectableBlock(anchor) : null;
-    if (!block || !surface.contains(block)) {
-      if (whisper.parentNode !== surface) surface.append(whisper);
+  var WHISPER_GAP_ABOVE = 14;
+  var WHISPER_GAP_BELOW = 26;
+  var reservedBlocks = /* @__PURE__ */ new WeakMap();
+  function placeWhisper(whisper, layout, block) {
+    const previous = reservedBlocks.get(whisper);
+    if (previous && previous !== block) previous.style.marginBottom = "";
+    if (!block) {
+      reservedBlocks.delete(whisper);
       return;
     }
-    if (block.tagName === "LI") {
-      if (block.lastChild !== whisper) block.append(whisper);
-      return;
-    }
-    if (block.nextSibling !== whisper) block.after(whisper);
+    reservedBlocks.set(whisper, block);
+    const origin = layout.getBoundingClientRect();
+    const rect = block.getBoundingClientRect();
+    whisper.style.left = `${rect.left - origin.left}px`;
+    whisper.style.width = `${rect.width}px`;
+    whisper.style.top = `${rect.bottom - origin.top + WHISPER_GAP_ABOVE}px`;
+    block.style.marginBottom = `${WHISPER_GAP_ABOVE + whisper.offsetHeight + WHISPER_GAP_BELOW}px`;
   }
-  function paintWhisper({ whisper, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded }) {
+  function repositionWhisper(whisper, layout) {
+    const block = reservedBlocks.get(whisper);
+    if (block && !whisper.hidden) placeWhisper(whisper, layout, block);
+  }
+  function paintWhisper({ whisper, layout, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded, held }) {
     const assigned = annotations.find((a) => a.id === assignedId);
     let state = null;
     let target = null;
@@ -2973,9 +2982,10 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       target = assigned;
     }
     whisper.hidden = state === null;
-    if (!state) return;
-    const end = target ? text2.range(target.start, target.end).endContainer : focusedBlock;
-    placeWhisper(whisper, surface, end?.nodeType === Node.TEXT_NODE ? end.parentElement : end);
+    if (!state) {
+      placeWhisper(whisper, layout, null);
+      return;
+    }
     const checked = state === "active" || state === "assigned" ? labels.find((l) => l.id === target.labelId) : null;
     whisper.dataset.state = state;
     whisper.dataset.assigned = checked?.direction ?? "";
@@ -3000,6 +3010,17 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       status2.dataset.text = `\u2713 ${checked.name} \xB7 ${undoKeys} undo`;
       hint.dataset.text = "";
     }
+    let anchor = focusedBlock;
+    if (state !== "precise") {
+      const end = text2.range(target.start, target.end).endContainer;
+      anchor = end.nodeType === Node.TEXT_NODE ? end.parentElement : end;
+    }
+    if (held && reservedBlocks.has(whisper)) {
+      placeWhisper(whisper, layout, reservedBlocks.get(whisper));
+      return;
+    }
+    const block = anchor ? selectableBlock(anchor) : null;
+    placeWhisper(whisper, layout, block && surface.contains(block) ? block : null);
   }
   function renderSavedList({ list, count, labels, annotations, activeId }) {
     count.textContent = `Annotations (${annotations.length})`;
@@ -3277,7 +3298,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const whisperRight = element("span", "review-whisper-end");
     whisperRight.dataset.end = "right";
     whisper.append(whisperLeft, whisperState, whisperRight);
-    surface.append(whisper);
+    layout.append(whisper);
     const names = highlightNames(token);
     const style = element("style");
     style.textContent = highlightStyle(names);
@@ -3334,10 +3355,30 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       const active = annotations.find((a) => a.id === state.activeId);
       paintHighlights({ names, text: text2, labels, annotations, pending, active });
       renderSavedList({ list, count, labels, annotations, activeId: state.activeId });
-      paintWhisper({ whisper, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded });
+      paintWhisperNow();
       if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
       else if (active) announce(`Editing ${labelName(active.labelId)}: ${active.quote.slice(0, 100)}`);
     }
+    function paintWhisperNow() {
+      const annotations = state.read();
+      const active = annotations.find((a) => a.id === state.activeId);
+      paintWhisper({ whisper, layout, surface, text: text2, labels, annotations, pending: state.pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded, held: pointerHeld });
+    }
+    let pointerHeld = false;
+    function releasePointer() {
+      if (!pointerHeld) return;
+      pointerHeld = false;
+      if (!destroyed) safe(paintWhisperNow);
+    }
+    listen(surface, "pointerdown", () => {
+      pointerHeld = true;
+    });
+    listen(document, "pointerup", releasePointer);
+    listen(document, "pointercancel", releasePointer);
+    const reflow = new ResizeObserver(() => {
+      if (!destroyed) repositionWhisper(whisper, layout);
+    });
+    reflow.observe(surface);
     function nativeRange() {
       const selection = getSelection();
       if (!selection.rangeCount || selection.isCollapsed) return null;
@@ -3723,6 +3764,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         if (destroyed) return;
         destroyed = true;
         listeners.abort();
+        reflow.disconnect();
         dialogs.close("cancel");
         for (const name of Object.values(names)) CSS.highlights.delete(name);
         if (nativeRange()) getSelection().removeAllRanges();

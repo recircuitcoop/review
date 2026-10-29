@@ -75,19 +75,38 @@ export function icon(name) {
   return holder.firstChild;
 }
 
-/** Put the whisper directly below the block holding `anchor`, moving it only when that block changes. */
-function placeWhisper(whisper, surface, anchor) {
-  const block = anchor ? selectableBlock(anchor) : null;
-  if (!block || !surface.contains(block)) {
-    if (whisper.parentNode !== surface) surface.append(whisper);
+// Approved spacing: the whisper sits 14px below its block and keeps 26px before the next one.
+const WHISPER_GAP_ABOVE = 14;
+const WHISPER_GAP_BELOW = 26;
+// The document block currently reserving room for each whisper.
+const reservedBlocks = new WeakMap();
+
+/**
+ * Lay the whisper over room reserved below `block` (null releases it). The whisper is an
+ * overlay outside the document, so caret movement and selection never enter it; only the
+ * block's bottom margin grows, so the passage itself never moves.
+ */
+export function placeWhisper(whisper, layout, block) {
+  const previous = reservedBlocks.get(whisper);
+  if (previous && previous !== block) previous.style.marginBottom = '';
+  if (!block) {
+    reservedBlocks.delete(whisper);
     return;
   }
-  // A list item keeps the whisper inside itself so the list stays a list.
-  if (block.tagName === 'LI') {
-    if (block.lastChild !== whisper) block.append(whisper);
-    return;
-  }
-  if (block.nextSibling !== whisper) block.after(whisper);
+  reservedBlocks.set(whisper, block);
+  const origin = layout.getBoundingClientRect();
+  const rect = block.getBoundingClientRect();
+  // Width first: long label names wrap, and the reserved room follows the real height.
+  whisper.style.left = `${rect.left - origin.left}px`;
+  whisper.style.width = `${rect.width}px`;
+  whisper.style.top = `${rect.bottom - origin.top + WHISPER_GAP_ABOVE}px`;
+  block.style.marginBottom = `${WHISPER_GAP_ABOVE + whisper.offsetHeight + WHISPER_GAP_BELOW}px`;
+}
+
+/** Re-lay the whisper after reflow (resize, fonts); offsets never depend on this. */
+export function repositionWhisper(whisper, layout) {
+  const block = reservedBlocks.get(whisper);
+  if (block && !whisper.hidden) placeWhisper(whisper, layout, block);
 }
 
 /**
@@ -95,7 +114,7 @@ function placeWhisper(whisper, surface, anchor) {
  * `assignedId` (the annotation just labeled). It holds no committed data; label
  * names always come from the current configuration. Hidden when there is no target.
  */
-export function paintWhisper({ whisper, surface, text, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded }) {
+export function paintWhisper({ whisper, layout, surface, text, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded, held }) {
   const assigned = annotations.find(a => a.id === assignedId);
   let state = null;
   let target = null;
@@ -113,11 +132,10 @@ export function paintWhisper({ whisper, surface, text, labels, annotations, pend
     target = assigned;
   }
   whisper.hidden = state === null;
-  if (!state) return;
-
-  // Below the final selected line: the block holding the range end (precise mode without a range: the caret block).
-  const end = target ? text.range(target.start, target.end).endContainer : focusedBlock;
-  placeWhisper(whisper, surface, end?.nodeType === Node.TEXT_NODE ? end.parentElement : end);
+  if (!state) {
+    placeWhisper(whisper, layout, null);
+    return;
+  }
 
   const checked = state === 'active' || state === 'assigned' ? labels.find(l => l.id === target.labelId) : null;
   whisper.dataset.state = state;
@@ -146,6 +164,21 @@ export function paintWhisper({ whisper, surface, text, labels, annotations, pend
     status.dataset.text = `✓ ${checked.name} · ${undoKeys} undo`;
     hint.dataset.text = '';
   }
+
+  // Below the final selected line: the block holding the range end. Precise mode stays under
+  // the block where the caret started, so extending the selection never moves the layout.
+  let anchor = focusedBlock;
+  if (state !== 'precise') {
+    const end = text.range(target.start, target.end).endContainer;
+    anchor = end.nodeType === Node.TEXT_NODE ? end.parentElement : end;
+  }
+  // During a pointer press the placement holds still, so a drag never moves text under the pointer.
+  if (held && reservedBlocks.has(whisper)) {
+    placeWhisper(whisper, layout, reservedBlocks.get(whisper));
+    return;
+  }
+  const block = anchor ? selectableBlock(anchor) : null;
+  placeWhisper(whisper, layout, block && surface.contains(block) ? block : null);
 }
 
 /** Rebuild the saved-annotation sidebar; each entry activates its annotation for editing. */

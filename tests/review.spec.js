@@ -218,3 +218,54 @@ test('••• swap keeps navbar and document still; real Escape collapses firs
   await expect(dialog).toBeVisible();
   expect(await dialog.textContent()).toBe(viaIcon);
 });
+
+// The same real-input sequence with the whisper hidden is the native baseline.
+async function freshFixture(page, hideWhisper) {
+  await page.goto('/tests/fixture.html');
+  await page.waitForFunction(() => window.review);
+  // Hiding also drops the room reserved below the passage, leaving plain native layout.
+  if (hideWhisper) await page.addStyleTag({ content: '.review-whisper { display: none !important; } .review-document [style] { margin-bottom: revert !important; }' });
+}
+
+test('precise Shift+ArrowDown crosses blocks past a visible whisper exactly as without it; F2 then label saves the full range', async ({ page }) => {
+  async function run(hideWhisper) {
+    await freshFixture(page, hideWhisper);
+    await page.locator('.review-document p').first().focus();
+    await page.keyboard.press('F2');
+    if (!hideWhisper) await expect(page.locator('.review-whisper')).toBeVisible();
+    const lengths = [];
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Shift+ArrowDown');
+      lengths.push(await page.evaluate(() => getSelection().toString().length));
+    }
+    await page.keyboard.press('F2');
+    await page.keyboard.press('Alt+ArrowRight');
+    const saved = await page.evaluate(() => review.read());
+    return { lengths, quote: saved[0]?.quote };
+  }
+  const baseline = await run(true);
+  const visible = await run(false);
+  // Each Shift+ArrowDown must reach a new line: no dead keypresses at block boundaries.
+  for (let i = 1; i < baseline.lengths.length; i++) expect(baseline.lengths[i]).toBeGreaterThan(baseline.lengths[i - 1]);
+  expect(visible).toEqual(baseline);
+});
+
+test('a mouse drag across a visible whisper selects the same text as without it', async ({ page }) => {
+  async function run(hideWhisper) {
+    await freshFixture(page, hideWhisper);
+    const paragraphs = page.locator('.review-document p');
+    await paragraphs.first().click();
+    if (!hideWhisper) await expect(page.locator('.review-whisper')).toBeVisible();
+    const from = await paragraphs.nth(0).boundingBox(), to = await paragraphs.nth(1).boundingBox();
+    await page.mouse.move(from.x + 45, from.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(to.x + 120, to.y + 10, { steps: 12 });
+    await page.mouse.up();
+    await openActions(page);
+    await page.getByRole('button', { name: 'Accept', exact: true }).click();
+    return (await page.evaluate(() => review.read()))[0]?.quote;
+  }
+  const baseline = await run(true);
+  expect(baseline).toContain('\n');
+  expect(await run(false)).toBe(baseline);
+});

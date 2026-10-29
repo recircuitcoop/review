@@ -2708,19 +2708,29 @@ function icon(name) {
   holder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`;
   return holder.firstChild;
 }
-function placeWhisper(whisper, surface, anchor) {
-  const block = anchor ? selectableBlock(anchor) : null;
-  if (!block || !surface.contains(block)) {
-    if (whisper.parentNode !== surface) surface.append(whisper);
+var WHISPER_GAP_ABOVE = 14;
+var WHISPER_GAP_BELOW = 26;
+var reservedBlocks = /* @__PURE__ */ new WeakMap();
+function placeWhisper(whisper, layout, block) {
+  const previous = reservedBlocks.get(whisper);
+  if (previous && previous !== block) previous.style.marginBottom = "";
+  if (!block) {
+    reservedBlocks.delete(whisper);
     return;
   }
-  if (block.tagName === "LI") {
-    if (block.lastChild !== whisper) block.append(whisper);
-    return;
-  }
-  if (block.nextSibling !== whisper) block.after(whisper);
+  reservedBlocks.set(whisper, block);
+  const origin = layout.getBoundingClientRect();
+  const rect = block.getBoundingClientRect();
+  whisper.style.left = `${rect.left - origin.left}px`;
+  whisper.style.width = `${rect.width}px`;
+  whisper.style.top = `${rect.bottom - origin.top + WHISPER_GAP_ABOVE}px`;
+  block.style.marginBottom = `${WHISPER_GAP_ABOVE + whisper.offsetHeight + WHISPER_GAP_BELOW}px`;
 }
-function paintWhisper({ whisper, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded }) {
+function repositionWhisper(whisper, layout) {
+  const block = reservedBlocks.get(whisper);
+  if (block && !whisper.hidden) placeWhisper(whisper, layout, block);
+}
+function paintWhisper({ whisper, layout, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded, held }) {
   const assigned = annotations.find((a) => a.id === assignedId);
   let state = null;
   let target = null;
@@ -2738,9 +2748,10 @@ function paintWhisper({ whisper, surface, text: text2, labels, annotations, pend
     target = assigned;
   }
   whisper.hidden = state === null;
-  if (!state) return;
-  const end = target ? text2.range(target.start, target.end).endContainer : focusedBlock;
-  placeWhisper(whisper, surface, end?.nodeType === Node.TEXT_NODE ? end.parentElement : end);
+  if (!state) {
+    placeWhisper(whisper, layout, null);
+    return;
+  }
   const checked = state === "active" || state === "assigned" ? labels.find((l) => l.id === target.labelId) : null;
   whisper.dataset.state = state;
   whisper.dataset.assigned = checked?.direction ?? "";
@@ -2765,6 +2776,17 @@ function paintWhisper({ whisper, surface, text: text2, labels, annotations, pend
     status.dataset.text = `\u2713 ${checked.name} \xB7 ${undoKeys} undo`;
     hint.dataset.text = "";
   }
+  let anchor = focusedBlock;
+  if (state !== "precise") {
+    const end = text2.range(target.start, target.end).endContainer;
+    anchor = end.nodeType === Node.TEXT_NODE ? end.parentElement : end;
+  }
+  if (held && reservedBlocks.has(whisper)) {
+    placeWhisper(whisper, layout, reservedBlocks.get(whisper));
+    return;
+  }
+  const block = anchor ? selectableBlock(anchor) : null;
+  placeWhisper(whisper, layout, block && surface.contains(block) ? block : null);
 }
 function renderSavedList({ list, count, labels, annotations, activeId }) {
   count.textContent = `Annotations (${annotations.length})`;
@@ -3042,7 +3064,7 @@ function mountReview(container, options) {
   const whisperRight = element("span", "review-whisper-end");
   whisperRight.dataset.end = "right";
   whisper.append(whisperLeft, whisperState, whisperRight);
-  surface.append(whisper);
+  layout.append(whisper);
   const names = highlightNames(token);
   const style = element("style");
   style.textContent = highlightStyle(names);
@@ -3099,10 +3121,30 @@ function mountReview(container, options) {
     const active = annotations.find((a) => a.id === state.activeId);
     paintHighlights({ names, text: text2, labels, annotations, pending, active });
     renderSavedList({ list, count, labels, annotations, activeId: state.activeId });
-    paintWhisper({ whisper, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded });
+    paintWhisperNow();
     if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
     else if (active) announce(`Editing ${labelName(active.labelId)}: ${active.quote.slice(0, 100)}`);
   }
+  function paintWhisperNow() {
+    const annotations = state.read();
+    const active = annotations.find((a) => a.id === state.activeId);
+    paintWhisper({ whisper, layout, surface, text: text2, labels, annotations, pending: state.pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded, held: pointerHeld });
+  }
+  let pointerHeld = false;
+  function releasePointer() {
+    if (!pointerHeld) return;
+    pointerHeld = false;
+    if (!destroyed) safe(paintWhisperNow);
+  }
+  listen(surface, "pointerdown", () => {
+    pointerHeld = true;
+  });
+  listen(document, "pointerup", releasePointer);
+  listen(document, "pointercancel", releasePointer);
+  const reflow = new ResizeObserver(() => {
+    if (!destroyed) repositionWhisper(whisper, layout);
+  });
+  reflow.observe(surface);
   function nativeRange() {
     const selection = getSelection();
     if (!selection.rangeCount || selection.isCollapsed) return null;
@@ -3488,6 +3530,7 @@ function mountReview(container, options) {
       if (destroyed) return;
       destroyed = true;
       listeners.abort();
+      reflow.disconnect();
       dialogs.close("cancel");
       for (const name of Object.values(names)) CSS.highlights.delete(name);
       if (nativeRange()) getSelection().removeAllRanges();

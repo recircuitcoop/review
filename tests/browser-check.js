@@ -610,7 +610,10 @@ await check('Whisper is absent when idle, after clear and after undo; shows pend
     review.select(3, 10);
     assert(shown(), 'No whisper for pending text'); equal(whisper.dataset.state, 'pending');
     equal(ends(), ['← Accept', 'Reject →']); assert(centre().startsWith('Unlabeled'), `Pending copy: ${centre()}`);
-    assert(whisper.previousElementSibling === surface.querySelector('p'), 'Whisper is not below the passage');
+    // Overlay outside the document, laid between the passage and the next block.
+    assert(!surface.contains(whisper), 'Whisper is inside the document');
+    const [first, second] = surface.querySelectorAll('p'), box = whisper.getBoundingClientRect();
+    assert(box.top > first.getBoundingClientRect().bottom && box.bottom < second.getBoundingClientRect().top, 'Whisper is not between the passage and the next block');
     equal(canonicalText(surface).text, review.export().document.text, 'Whisper entered canonical text');
     click(container, 'clear'); assert(!shown(), 'Whisper remained after clear');
     review.select(3, 10); click(container, 'left');
