@@ -63,6 +63,7 @@ const tokens = {
   focusOffset: ['--review-focus-offset', 'outline-offset', '3px'],
   documentPadding: ['--review-document-padding', 'padding', '36px 38px 26px'],
   narrowDocumentPadding: ['--review-narrow-document-padding', 'padding', '28px 22px 24px'],
+  navbarHeight: ['--review-navbar-height', 'height', '62px'],
   toolbarPadding: ['--review-toolbar-padding', 'padding', '9px 18px'],
   toolbarGap: ['--review-toolbar-gap', 'gap', '8px'],
   buttonPadding: ['--review-button-padding', 'padding', '7px 9px'],

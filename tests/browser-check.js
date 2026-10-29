@@ -19,6 +19,13 @@ const pointerClick = target => {
   target.dispatchEvent(new PointerEvent('pointerdown', init));
   target.dispatchEvent(new PointerEvent('pointerup', init));
 };
+// Simulate both platform sources; userAgentData undefined exercises the navigator.platform fallback.
+function simulatePlatform(platform, userAgentPlatform) {
+  Object.defineProperty(navigator, 'platform', { configurable: true, value: platform });
+  Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: userAgentPlatform === undefined ? undefined : { platform: userAgentPlatform } });
+}
+// The real values live on Navigator.prototype, so deleting the own overrides restores them.
+function restorePlatform() { delete navigator.platform; delete navigator.userAgentData; }
 async function check(name, run) {
   try { await run(); results.push({ name, passed: true }); }
   catch (error) { results.push({ name, passed: false, error: error.message }); }
@@ -115,10 +122,9 @@ await check('Effective shortcut remapping updates dispatch, hints, and help with
   container.querySelector('dialog').close(); review.destroy(); container.remove();
 });
 await check('Windows, Linux, and macOS modifier routing supports undo, both redo variants, and scoped export', async () => {
-  const original = Object.getOwnPropertyDescriptor(navigator, 'platform');
   try {
     for (const platform of ['Win32', 'Linux x86_64', 'MacIntel']) {
-      Object.defineProperty(navigator, 'platform', { configurable: true, value: platform });
+      simulatePlatform(platform);
       const { container, review } = mount();
       try {
         const surface = container.querySelector('.review-document');
@@ -138,7 +144,7 @@ await check('Windows, Linux, and macOS modifier routing supports undo, both redo
         await tick();
       } finally { review.destroy(); container.remove(); }
     }
-  } finally { if (original) Object.defineProperty(navigator, 'platform', original); else delete navigator.platform; }
+  } finally { restorePlatform(); }
 });
 await check('Invalid mount/shortcut options fail before changing host content', () => {
   const container = document.createElement('div'); container.textContent = 'host'; document.querySelector('#fixtures').append(container);
@@ -244,7 +250,7 @@ await check('No-target shortcuts preserve browser defaults except scoped destruc
     equal(review.read(), []); equal(review.export().document.text, canonicalText(surface).text);
   } finally { review.destroy(); container.remove(); }
 });
-await check('Pending replacement, outside clicks, link suppression, and toolbar focus follow the interaction defaults', () => {
+await check('Pending replacement, host-control clicks, link suppression, and toolbar focus follow the interaction defaults', () => {
   const { container, review } = mount(); let pending;
   container.addEventListener('review:selection', event => { pending = event.detail; });
   try {
@@ -255,8 +261,9 @@ await check('Pending replacement, outside clicks, link suppression, and toolbar 
     const anchor = container.querySelector('.review-document a');
     const event = new MouseEvent('click', { bubbles: true, cancelable: true }); anchor.dispatchEvent(event);
     assert(event.defaultPrevented, 'Ordinary link click would navigate');
+    // A press outside the widget (e.g. a host Save button) keeps the pending range.
     document.querySelector('#summary').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 2, isPrimary: true, button: 0 }));
-    equal(pending, null); equal(review.read(), []);
+    equal(pending.quote, 'Next 🌍 世界.', 'Outside press dropped the pending selection'); equal(review.read(), []);
     review.undo(); equal(review.read(), []);
   } finally { review.destroy(); container.remove(); }
 });
@@ -267,7 +274,7 @@ await check('Every toolbar command and keyboard dispatcher path uses the shared 
   container.addEventListener('review:export', () => exports++);
   container.addEventListener('review:complete', () => completions++);
   try {
-    const expected = ['left', 'right', 'clear', 'remove', 'undo', 'redo', 'previousBlock', 'nextBlock', 'selectBlock', 'precise', 'previousAnnotation', 'nextAnnotation', 'export', 'finish', 'help'];
+    const expected = ['left', 'right', 'clear', 'remove', 'undo', 'redo', 'previousBlock', 'nextBlock', 'selectBlock', 'precise', 'previousAnnotation', 'nextAnnotation', 'export', 'help', 'finish'];
     equal([...container.querySelectorAll('[data-command]')].map(button => button.dataset.command), expected);
     const mod = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
     surface.focus(); key(surface, 'ArrowDown', { altKey: true }); equal(document.activeElement.tagName, 'H1');
@@ -358,50 +365,102 @@ await check('Destroying pending completion resolves it without callbacks, UI, or
   review.destroy(); equal(await promise, null); equal(saved, 0); equal(container.children.length, 0); equal(CSS.highlights.size, before); container.remove();
 });
 
-await check('Swipe controller handles final displacement, duplicate release, cancellation, and outside starts', () => {
-  for (const scenario of ['left', 'right', 'short', 'reversed', 'vertical', 'cancel', 'escape', 'outside', 'destroy']) {
-    const { container, review } = mount(); let pending;
-    container.addEventListener('review:selection', event => { pending = event.detail; });
+// Center of the first client rectangle of a canonical range, read at call time.
+function rangePoint(container, start, end) {
+  const surface = container.querySelector('.review-document');
+  surface.querySelector('p').scrollIntoView({ block: 'center' });
+  const rect = canonicalText(surface).range(start, end).getClientRects()[0];
+  return { clientX: (rect.left + rect.right) / 2, clientY: (rect.top + rect.bottom) / 2 };
+}
+// Dispatch a wheel event at a viewport point; returns the event so callers can inspect defaultPrevented.
+function wheel(container, point, init) {
+  const surface = container.querySelector('.review-document');
+  // An open modal makes the document inert to hit testing; still deliver to the surface to exercise the guard.
+  const hit = document.elementFromPoint(point.clientX, point.clientY);
+  const target = surface.contains(hit) ? hit : surface;
+  const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaMode: 0, ...point, ...init });
+  target.dispatchEvent(event);
+  return event;
+}
+
+await check('Pure horizontal wheel over pending text labels once per direction and never cancels scrolling', () => {
+  for (const [direction, deltaX] of [['left', -30], ['right', 30]]) {
+    const { container, review } = mount();
     try {
-      const surface = container.querySelector('.review-document');
-      // Synthetic events have no native active pointer; trusted capture is checked by pointer-check.js.
-      surface.setPointerCapture = () => {}; surface.hasPointerCapture = () => false;
-      review.select(3, 29);
-      surface.querySelector('p').scrollIntoView({ block: 'center' });
-      const map = canonicalText(surface), range = map.range(3, 29), rect = range.getClientRects()[0];
-      const startX = scenario === 'outside' ? surface.getBoundingClientRect().left + 2 : rect.left + 3;
-      const startY = (rect.top + rect.bottom) / 2;
-      const send = (type, dx = 0, dy = 0) => surface.dispatchEvent(new PointerEvent(type, {
-        bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, button: 0, clientX: startX + dx, clientY: startY + dy
-      }));
-      const before = surface.getBoundingClientRect();
-      send('pointerdown');
-      if (scenario !== 'outside') assert(container.querySelector('.review-swipe-preview'), `${scenario}: no swipe preview`);
-      send('pointermove', scenario === 'left' ? -90 : 90);
-      const ghost = container.querySelector('.review-swipe-preview');
-      if (ghost) { assert(ghost.textContent.includes(pending.quote), 'Preview lost multiline quote'); equal(getComputedStyle(ghost).position, 'fixed'); }
-      equal(surface.getBoundingClientRect().height, before.height, 'Preview shifted document layout');
-      if (scenario === 'cancel') send('pointercancel');
-      if (scenario === 'escape') { key(surface, 'Escape'); assert(pending, 'First Escape cleared pending text'); }
-      if (scenario === 'destroy') { review.destroy(); assert(!container.querySelector('.review-swipe-preview'), 'Destroy leaked preview'); continue; }
-      const dx = scenario === 'left' ? -90 : ['short', 'reversed'].includes(scenario) ? 20 : 90;
-      send('pointerup', dx, scenario === 'vertical' ? 100 : 0);
-      send('pointerup', dx);
-      const expected = ['left', 'right'].includes(scenario);
-      equal(review.read().length, expected ? 1 : 0, `${scenario}: wrong commit count`);
-      if (expected) { equal(review.read()[0].labelId, scenario); equal(review.read()[0].quote, map.text.slice(3, 29)); }
-      else if (scenario !== 'outside') equal(pending.quote, map.text.slice(3, 29), `${scenario}: pending lost`);
-      assert(!container.querySelector('.review-swipe-preview'), `${scenario}: preview leaked`);
-      if (scenario === 'escape') { key(surface, 'Escape'); equal(pending, null, 'Second Escape did not clear selection'); }
+      review.select(3, 10);
+      const point = rangePoint(container, 3, 10);
+      const first = wheel(container, point, { deltaX, deltaY: 0 });
+      assert(!first.defaultPrevented, `${direction}: wheel was canceled`);
+      equal(review.read().length, 1, `${direction}: wrong commit count`);
+      equal(review.read()[0].labelId, direction); equal(review.read()[0].quote, 'One two');
+      // Later events of the same stream find no pending range; the saved annotation is not relabeled.
+      for (const repeat of [deltaX, deltaX, -deltaX]) assert(!wheel(container, point, { deltaX: repeat, deltaY: 0 }).defaultPrevented, 'Repeat was canceled');
+      equal(review.read().length, 1, `${direction}: repeated events committed again`);
+      equal(review.read()[0].labelId, direction, `${direction}: repeated events relabeled`);
     } finally { review.destroy(); container.remove(); }
   }
 });
 
+await check('Vertical, mixed-axis, zoom-chord, outside, no-pending, saved-only and dialog-open wheel input never labels', () => {
+  const scenarios = ['vertical', 'mixed', 'ctrl', 'meta', 'outside', 'no pending', 'saved only', 'dialog'];
+  for (const scenario of scenarios) {
+    const { container, review } = mount(); let pending;
+    container.addEventListener('review:selection', event => { pending = event.detail; });
+    try {
+      if (scenario === 'saved only') {
+        // An active left annotation would be relabeled by a rightward classify; wheel must not do that.
+        review.select(3, 10); click(container, 'left'); review.activate(review.read()[0].id);
+      } else if (scenario !== 'no pending') review.select(3, 10);
+      if (scenario === 'dialog') click(container, 'help');
+      // "outside" hovers the heading, which lies outside the pending rectangles.
+      const point = scenario === 'outside' ? rangePoint(container, 0, 2) : rangePoint(container, 3, 10);
+      const init = {
+        vertical: { deltaX: 0, deltaY: 30 },
+        mixed: { deltaX: 30, deltaY: 2 },
+        ctrl: { deltaX: 30, deltaY: 0, ctrlKey: true },
+        meta: { deltaX: 30, deltaY: 0, metaKey: true },
+      }[scenario] ?? { deltaX: 30, deltaY: 0 };
+      const before = review.read();
+      const event = wheel(container, point, init);
+      assert(!event.defaultPrevented, `${scenario}: wheel was canceled`);
+      equal(review.read(), before, `${scenario}: annotations changed`);
+      if (!['no pending', 'saved only'].includes(scenario)) equal(pending?.quote, 'One two', `${scenario}: pending lost`);
+      if (scenario === 'dialog') container.querySelector('dialog').close();
+    } finally { review.destroy(); container.remove(); }
+  }
+});
+
+await check('Known limitation: a late wheel event after a new selection labels that new range', () => {
+  // Portable APIs cannot tell old momentum from a new gesture; plan 18 records this as open native evidence.
+  const { container, review } = mount();
+  try {
+    review.select(3, 10); wheel(container, rangePoint(container, 3, 10), { deltaX: -30, deltaY: 0 });
+    review.select(11, 14); wheel(container, rangePoint(container, 11, 14), { deltaX: -30, deltaY: 0 });
+    equal(review.read().map(a => a.quote), ['One two', 'and']);
+  } finally { review.destroy(); container.remove(); }
+});
+
+await check('A pointer press on pending text is left to native selection: no cancel, capture or preview', () => {
+  const { container, review } = mount();
+  try {
+    const surface = container.querySelector('.review-document');
+    let captured = false; surface.setPointerCapture = () => { captured = true; };
+    review.select(3, 10);
+    const point = rangePoint(container, 3, 10);
+    const init = { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, button: 0, ...point };
+    const down = new PointerEvent('pointerdown', init); surface.querySelector('p').dispatchEvent(down);
+    assert(!down.defaultPrevented, 'Press on pending text prevented native selection');
+    assert(!captured, 'Press on pending text captured the pointer');
+    assert(!container.querySelector('.review-swipe-preview'), 'Press on pending text showed a swipe preview');
+    surface.querySelector('p').dispatchEvent(new PointerEvent('pointerup', { ...init, clientX: point.clientX + 90 }));
+    equal(review.read(), [], 'Pointer drag labeled text');
+  } finally { review.destroy(); container.remove(); }
+});
+
 await check('All displayed shortcut hints and help use Cmd on Mac and Ctrl elsewhere, including remapping', () => {
-  const original = Object.getOwnPropertyDescriptor(navigator, 'platform');
   try {
     for (const platform of ['MacIntel', 'Win32', 'Linux x86_64']) {
-      Object.defineProperty(navigator, 'platform', { configurable: true, value: platform });
+      simulatePlatform(platform);
       const { container, review } = mount({ shortcuts: { undo: 'mod+Q' } });
       try {
         const modifier = platform === 'MacIntel' ? 'Cmd' : 'Ctrl';
@@ -416,7 +475,159 @@ await check('All displayed shortcut hints and help use Cmd on Mac and Ctrl elsew
         assert(!help.textContent.includes('Mod+'), `${platform} help exposes Mod`);
       } finally { review.destroy(); container.remove(); }
     }
-  } finally { if (original) Object.defineProperty(navigator, 'platform', original); else delete navigator.platform; }
+  } finally { restorePlatform(); }
+});
+
+await check('Platform detection prefers userAgentData, falls back to navigator.platform, and drives every Mod site', () => {
+  try {
+    // [navigator.platform, userAgentData.platform, expected Apple]
+    for (const [platform, userAgentPlatform, apple] of [['', 'macOS', true], ['iPad', undefined, true], ['MacIntel', 'Windows', false]]) {
+      simulatePlatform(platform, userAgentPlatform);
+      const { container, review } = mount();
+      try {
+        const undo = container.querySelector('[data-command="undo"]');
+        const scenario = `${platform || '(empty)'}/${userAgentPlatform ?? '(none)'}`;
+        assert(undo.title.includes(`${apple ? 'Cmd' : 'Ctrl'}+Z`), `${scenario} tooltip: ${undo.title}`);
+        equal(undo.getAttribute('aria-keyshortcuts'), `${apple ? 'Meta' : 'Control'}+Z`, `${scenario} aria-keyshortcuts`);
+        const p = container.querySelector('.review-document p'); p.focus(); key(p, 'F2');
+        key(p, 'ArrowRight', { shiftKey: true, ...(apple ? { altKey: true } : { ctrlKey: true }) });
+        key(p, 'F2'); click(container, 'right');
+        equal(review.read()[0]?.quote.trim(), 'One', `${scenario} word selection`);
+      } finally { review.destroy(); container.remove(); }
+    }
+  } finally { restorePlatform(); }
+});
+
+await check('Public undo and redo leave precise mode and repaint like the keyboard path', () => {
+  const { container, review } = mount();
+  try {
+    review.select(3, 10); click(container, 'left');
+    const p = container.querySelector('.review-document p'); const whisper = container.querySelector('.review-whisper');
+    const precise = () => !whisper.hidden && whisper.dataset.state === 'precise';
+    p.focus(); key(p, 'F2'); assert(precise(), 'F2 did not enter precise mode');
+    equal(review.undo(), true); assert(!precise(), 'Public undo stayed in precise mode');
+    assert(key(p, 'ArrowRight', { shiftKey: true }), 'Arrow keys still drive the precise caret after undo');
+    p.focus(); key(p, 'F2'); equal(review.redo(), true); assert(!precise(), 'Public redo stayed in precise mode');
+    equal(review.read().length, 1); equal(review.redo(), false);
+  } finally { review.destroy(); container.remove(); }
+});
+
+// Widget UI (plan 23 / 25 slice 4).
+const platformMod = () => /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+const undoHint = () => /Mac/.test(navigator.platform) ? 'Cmd+Z' : 'Ctrl+Z';
+const closeDialog = async dialog => {
+  const closed = new Promise(resolve => dialog.addEventListener('close', resolve, { once: true }));
+  dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+  await closed;
+};
+
+await check('Navbar names the document by optional title with ID fallback; a non-string title is rejected', () => {
+  const titled = mount({ document: { ...options.document, title: 'Project notes' } });
+  const plain = mount();
+  try {
+    equal(titled.container.querySelector('.review-title').textContent.trim(), 'Project notes');
+    equal(plain.container.querySelector('.review-title').textContent.trim(), 'check.md');
+  } finally { titled.review.destroy(); plain.review.destroy(); titled.container.remove(); plain.container.remove(); }
+  const host = document.createElement('div'); host.textContent = 'host'; document.querySelector('#fixtures').append(host);
+  let rejected = false; try { mountReview(host, { ...options, document: { ...options.document, title: 42 } }); } catch { rejected = true; }
+  assert(rejected, 'Non-string title accepted'); equal(host.textContent, 'host'); host.remove();
+});
+
+await check('••• swaps title and action strip in one fixed-height row without moving the document or the target', () => {
+  const { container, review } = mount(); let events = 0, exports = 0;
+  try {
+    const navbar = container.querySelector('.review-navbar'), surface = container.querySelector('.review-document');
+    const toggle = container.querySelector('.review-more'), strip = container.querySelector('.review-actions'), title = container.querySelector('.review-title');
+    review.select(3, 10);
+    container.addEventListener('review:selection', () => events++);
+    container.addEventListener('review:export', () => exports++);
+    const height = navbar.getBoundingClientRect().height, top = surface.getBoundingClientRect().top;
+    equal(height, 62, 'Navbar height');
+    equal(toggle.getAttribute('aria-expanded'), 'false'); assert(strip.hidden && !title.hidden, 'Strip should start collapsed');
+    toggle.click();
+    equal(toggle.getAttribute('aria-expanded'), 'true'); assert(!strip.hidden && title.hidden, 'Toggle did not swap in the strip');
+    equal(navbar.getBoundingClientRect().height, height, 'Navbar height changed'); equal(surface.getBoundingClientRect().top, top, 'Document moved');
+    equal([...strip.querySelectorAll('[data-command]')].map(b => b.dataset.command), ['left', 'right', 'clear', 'remove', 'undo', 'redo', 'previousBlock', 'nextBlock', 'selectBlock', 'precise', 'previousAnnotation', 'nextAnnotation', 'export']);
+    const labelNames = [...strip.querySelectorAll('[data-command="left"],[data-command="right"]')].map(b => b.textContent);
+    assert(labelNames[0].includes('Accept') && labelNames[1].includes('Reject'), `Label buttons lack configured names: ${labelNames}`);
+    const exportButton = strip.querySelector('[data-command="export"]'); equal(exportButton.textContent, 'Export files');
+    exportButton.click(); equal(exports, 1, 'Export files control');
+    key(surface, 'e', { ...platformMod(), shiftKey: true }); equal(exports, 2, 'Mod+Shift+E');
+    toggle.click(); assert(strip.hidden && !title.hidden, 'Toggle did not restore the title');
+    equal(navbar.getBoundingClientRect().height, height); equal(surface.getBoundingClientRect().top, top);
+    equal(events, 0, 'Toggling changed the selection'); equal(review.read(), []);
+  } finally { review.destroy(); container.remove(); }
+});
+
+await check('First Escape collapses an open strip and keeps the target; the next Escape clears it', () => {
+  const { container, review } = mount(); let selection;
+  container.addEventListener('review:selection', event => { selection = event.detail; });
+  try {
+    review.select(3, 10); const toggle = container.querySelector('.review-more');
+    toggle.click(); const left = container.querySelector('.review-actions [data-command="left"]'); left.focus();
+    assert(!key(left, 'Escape'), 'Escape that collapsed the strip was not handled');
+    equal(toggle.getAttribute('aria-expanded'), 'false'); assert(document.activeElement === toggle, 'Focus did not return to •••');
+    equal(selection?.quote, 'One two', 'Collapsing cleared the target');
+    key(toggle, 'Escape'); equal(selection, null, 'Second Escape did not clear');
+  } finally { review.destroy(); container.remove(); }
+});
+
+await check('Keyboard icon and F1 open the same keycap help with actual labels; closing keeps the target and focus', async () => {
+  const { container, review } = mount({ labels: [{ id: 'left', name: 'Evidence', direction: 'left' }, { id: 'right', name: 'Question', direction: 'right' }] });
+  let selection;
+  container.addEventListener('review:selection', event => { selection = event.detail; });
+  try {
+    review.select(3, 10); const surface = container.querySelector('.review-document');
+    const icon = container.querySelector('.review-navbar [data-command="help"]');
+    assert(icon && !icon.closest('.review-actions'), 'Keyboard icon is not in the navbar');
+    icon.focus(); icon.click();
+    const help = container.querySelector('dialog'); assert(help?.open, 'Keyboard icon did not open help');
+    const content = help.textContent;
+    for (const expected of ['Label Evidence', 'Label Question', 'Export files', undoHint()]) assert(content.includes(expected), `Help lacks ${expected}`);
+    assert(help.querySelectorAll('kbd').length > 10, 'Help has no keycaps');
+    assert(help.querySelector('details summary')?.textContent.includes('Selection'), 'Selection commands not in an expandable section');
+    assert(help.querySelector('details').textContent.includes('Precise selection'), 'Precise selection missing from expandable section');
+    await closeDialog(help);
+    assert(document.activeElement === icon, 'Focus did not return to the keyboard icon'); equal(selection?.quote, 'One two', 'Help cleared the target');
+    surface.focus(); key(surface, 'F1');
+    const again = container.querySelector('dialog'); assert(again?.open, 'F1 did not open help');
+    equal(again.textContent, content, 'F1 and the icon open different help');
+    await closeDialog(again); assert(document.activeElement === surface, 'Focus did not return to the document'); equal(selection?.quote, 'One two');
+  } finally { review.destroy(); container.remove(); }
+});
+
+await check('Whisper is absent when idle, after clear and after undo; shows pending, precise, assigned and active copy', () => {
+  const { container, review } = mount();
+  try {
+    const whisper = container.querySelector('.review-whisper'), surface = container.querySelector('.review-document');
+    // Whisper words are generated content (data-text), so they never become document text.
+    const centre = () => [...whisper.querySelectorAll('.review-whisper-state [data-text]')].map(part => part.dataset.text).join('');
+    const ends = () => [...whisper.querySelectorAll('.review-whisper-end')].map(end => end.dataset.text);
+    equal(whisper.textContent, '', 'Whisper owns text nodes');
+    const shown = () => !whisper.hidden && whisper.isConnected;
+    assert(!shown(), 'Whisper visible while idle');
+    assert(!whisper.closest('[aria-live]') && !whisper.hasAttribute('aria-live'), 'Whisper would double-announce');
+    review.select(3, 10);
+    assert(shown(), 'No whisper for pending text'); equal(whisper.dataset.state, 'pending');
+    equal(ends(), ['← Accept', 'Reject →']); assert(centre().startsWith('Unlabeled'), `Pending copy: ${centre()}`);
+    // Overlay outside the document, laid between the passage and the next block.
+    assert(!surface.contains(whisper), 'Whisper is inside the document');
+    const [first, second] = surface.querySelectorAll('p'), box = whisper.getBoundingClientRect();
+    assert(box.top > first.getBoundingClientRect().bottom && box.bottom < second.getBoundingClientRect().top, 'Whisper is not between the passage and the next block');
+    equal(canonicalText(surface).text, review.export().document.text, 'Whisper entered canonical text');
+    click(container, 'clear'); assert(!shown(), 'Whisper remained after clear');
+    review.select(3, 10); click(container, 'left');
+    assert(shown(), 'No just-assigned confirmation'); equal(whisper.dataset.state, 'assigned');
+    equal(centre(), `✓ Accept · ${undoHint()} undo`); equal(ends(), ['← ✓ Accept', 'Reject →']);
+    assert(whisper.querySelector('[data-end="left"]').classList.contains('review-whisper-checked'), 'Assigned endpoint not marked');
+    review.undo(); assert(!shown(), 'Whisper remained after undo');
+    review.redo(); review.activate(review.read()[0].id);
+    assert(shown(), 'No whisper for the active annotation'); equal(whisper.dataset.state, 'active'); equal(centre(), '✓ Accept · ••• to edit');
+    key(surface, 'Escape'); assert(!shown(), 'Whisper remained after Escape');
+    const p = surface.querySelector('p'); p.focus(); key(p, 'F2');
+    assert(shown(), 'No whisper in precise mode'); equal(whisper.dataset.state, 'precise'); equal(centre(), 'Selecting text');
+    key(p, 'F2'); assert(!shown(), 'Whisper remained after leaving precise mode without a range');
+  } finally { review.destroy(); container.remove(); }
 });
 
 const failed = results.filter(r => !r.passed).length;

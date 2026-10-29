@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wheel probe</title>
+<link rel="stylesheet" href="/src/review.css">
+<style>
+  body { margin: 1rem; font-family: system-ui, sans-serif; }
+  #log { border-collapse: collapse; font: 12px/1.4 ui-monospace, monospace; margin-block: 1rem; }
+  #log th, #log td { border: 1px solid #999; padding: 2px 6px; text-align: right; }
+</style>
+</head>
+<body>
+<h1>Wheel probe (plan 17)</h1>
+<p>Developer probe: select text, hover it and scroll. Wheel events are observed and <strong>never reach the annotator</strong>, so nothing is labeled; the browser's own scrolling, zoom and navigation are left alone. Values stay on this page: no document text, no telemetry.</p>
+<p><button type="button" id="clear-log">Clear log</button> <span id="scroll-position">Page scroll: 0px</span></p>
+<table id="log">
+  <thead><tr><th>#</th><th>deltaX</th><th>deltaY</th><th>deltaMode</th><th>ctrl</th><th>meta</th><th>shift</th><th>cancelable</th><th>over pending</th><th>pure horizontal</th></tr></thead>
+  <tbody></tbody>
+</table>
+<div id="fixture"></div>
+<script type="module" src="/tests/wheel-probe.js"></script>
+</body>
+</html>

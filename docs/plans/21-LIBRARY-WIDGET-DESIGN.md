@@ -1,6 +1,6 @@
 # Library widget design
 
-Status: **Toolbar swap and Inline whisper lo-fi approved. High-fidelity preview ready for user review in [23](23-WIDGET-HIGH-FIDELITY.md).**
+Status: **Toolbar swap and Inline whisper approved; high fidelity [23](23-WIDGET-HIGH-FIDELITY.md) implemented in production (2026-10-29).**
 
 The subsequent [joint user-flow review in 22](22-WHISPER-USER-FLOW-REVIEW.md) supersedes the interchangeable centre-copy and mock transition assumptions below. UX, design and frontend review now focus on state-led guidance, accurate Undo/saved-target behavior and narrow/multiline flow before another preview. Historical sketches remain illustrative rather than behavior contracts.
 

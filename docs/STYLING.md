@@ -91,6 +91,7 @@ Values must be nonempty CSS strings accepted by the browser for the correspondin
 | `focusOffset` | `3px` |
 | `documentPadding` | `36px 38px 26px` |
 | `narrowDocumentPadding` | `28px 22px 24px` |
+| `navbarHeight` | `62px` |
 | `toolbarPadding` | `9px 18px` |
 | `toolbarGap` | `8px` |
 | `buttonPadding` | `7px 9px` |
@@ -101,4 +102,4 @@ Values must be nonempty CSS strings accepted by the browser for the correspondin
 | `statusPadding` | `12px 18px` |
 | `colorScheme` | `inherit` |
 
-This API supplies visual defaults and configuration; the approved toolbar/whisper interaction redesign and native swipe gates remain separate work.
+The navbar, action strip, whisper and keyboard-help popup ([plan 23](plans/23-WIDGET-HIGH-FIDELITY.md)) use these tokens: `navbarHeight`, `toolbarBackground`, `toolbarPadding` and `toolbarGap` for the fixed top row; `primary*` for Done; `left*`/`right*` text colours for the label buttons and the checked whisper label; `mutedColor` and `smallFontSize` for the whisper; `surfaceBackground`, `borderColor` and `codeFontFamily` for keycaps; `shadowColor` for dialog depth. Native swipe gates remain separate work.

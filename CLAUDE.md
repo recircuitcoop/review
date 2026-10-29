@@ -32,7 +32,7 @@ Do not add accounts, backend storage, collaboration, model suggestions, mutable-
 ## Invariants to preserve
 
 - Selection alone never commits an annotation. One pending range may exist; a separate gesture or classification command commits it.
-- A successful swipe commits exactly once. Canceled gestures and vertical scrolling never commit; canceled swipes retain the pending selection.
+- A qualifying native horizontal scroll over pending text commits exactly once (trigger rule in plan 25). Pointer drags, vertical/mixed-axis scrolling and zoom input never commit and retain the pending selection. Never cancel wheel events.
 - Swipe, buttons, and keyboard commands share one commit path. Keep the complete initial-release shortcut map and contextual handling from the specification.
 - Annotation identity depends on immutable document version and canonical rendered text, never screen geometry. Use versioned canonical-text rules, UTF-16 code-unit offsets, and exclusive end positions.
 - Restore only against the matching document version and validate each range against its exact quote. Preserve stable annotation IDs and independent overlapping ranges.
@@ -43,7 +43,7 @@ Do not add accounts, backend storage, collaboration, model suggestions, mutable-
 
 ## First implementation checkpoint
 
-Follow the specification's complete desktop proof of concept: formatted Markdown, block and exact range selection, separate swipe classification, two label buttons, full keyboard map and help, overlap editing, selection removal, undo/redo, Done, and JSON export. Prove gesture ambiguity and exact range round-tripping before expanding browser or touch coverage.
+Follow the specification's complete desktop proof of concept: formatted Markdown, block and exact range selection, separate horizontal-scroll classification, two label buttons, full keyboard map and help, overlap editing, selection removal, undo/redo, Done, and JSON export. Prove gesture ambiguity and exact range round-tripping before expanding browser or touch coverage.
 
 ## Required development tools
 

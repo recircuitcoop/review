@@ -34,31 +34,31 @@ Click and drag takes precedence over block selection. The library waits until th
 
 ### Assign a label
 
-After establishing a selection, the user makes a separate horizontal swipe starting on its highlighted area:
+After establishing a selection, the user hovers its highlighted area and scrolls horizontally using the device's native input (trackpad, tilt wheel or Shift+wheel where the browser reports horizontal scrolling). This is the desktop “swipe”:
 
-- Swipe left assigns the configured left label.
-- Swipe right assigns the configured right label.
-- An incomplete or canceled swipe leaves the selection pending.
+- Scrolling left assigns the configured left label.
+- Scrolling right assigns the configured right label.
+- Vertical, mixed-axis or zoom input, or input outside the pending highlight, leaves the selection pending.
 
-During the swipe, a temporary visual representation of the selection follows the gesture and previews the destination label. The document layout remains stable. A multiline selection behaves as one item.
+The contextual whisper attached to the pending passage names both configured labels at their directions before assignment. The document layout remains stable. A multiline selection behaves as one item. Dragging that begins on highlighted text adjusts the native text selection; it never labels.
 
-After a successful swipe, the library commits the annotation, colors the passage according to its label, and clears the active selection. The user can immediately select another passage.
+After a successful assignment, the library commits the annotation, colors the passage according to its label, and clears the active selection. The user can immediately select another passage.
 
 Visible label buttons and keyboard actions provide equivalent classification without swiping. Undo reverses the latest committed annotation action.
 
-### Planned desktop and mobile interaction correction
+### Desktop and mobile interaction correction
 
-The user has requested a UX correction after finding desktop “swiping” unclear. The preferred desktop flow is **select a passage → hover its pending highlight → scroll left/right using the device's native horizontal scrolling → assign that configured label**. Do not require dragging selected text or a desktop drag handle. Do not implement custom diagonal/axis-ratio recognition, convert vertical scrolling into labels, or suppress native scrolling, zoom or browser navigation. Ordinary mice without horizontal input retain the label buttons and keyboard alternatives. Only a pending selection can be labeled this way; saved text is not implicitly relabeled by scrolling.
+The user requested a UX correction after finding desktop pointer “swiping” unclear. The desktop flow is **select a passage → hover its pending highlight → scroll left/right using the device's native horizontal scrolling → assign that configured label**. Do not require dragging selected text or a desktop drag handle. Do not implement custom diagonal/axis-ratio recognition, convert vertical scrolling into labels, or suppress native scrolling, zoom or browser navigation. Ordinary mice without horizontal input retain the label buttons and keyboard alternatives. Only a pending selection can be labeled this way; saved text is not implicitly relabeled by scrolling.
 
-Joint UX-expert and senior frontend review is recorded in [17 — Native-scroll UX prototype](docs/plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md). This is a planned correction, not implemented or validated behavior. Prototype native input and discoverability before implementing [18 — Desktop hover/scroll labeling](docs/plans/18-DESKTOP-HOVER-SCROLL-LABELING.md); do not inherit the old pointer prototype's displacement/slope rules or invent gesture-end timing in advance.
+Trigger rule ([plan 25](docs/plans/25-ASSESSMENT-REMEDIATION.md)): a `wheel` event over the exact pending-highlight rectangles whose `deltaX` is nonzero and `deltaY` is zero labels once (`deltaX < 0` left, `> 0` right). Events with Ctrl/Meta held never label. The library never cancels wheel events. A commit clears the pending range, so later events in the same stream do nothing. The user directed implementation of [18](docs/plans/18-DESKTOP-HOVER-SCROLL-LABELING.md) ahead of the [17](docs/plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md) first-use study; that study and native-device evidence remain open, and no discoverability claim is made.
 
 The separately requested mobile flow must preserve native long press, selection handles, vertical scrolling, pinch zoom and browser navigation. Its horizontal touch action needs its own prototype/capability decision and physical-device proof under [19 — Mobile selection and swipe](docs/plans/19-MOBILE-NATIVE-SELECTION-AND-SWIPE.md) and [20 — Input UX acceptance](docs/plans/20-INPUT-UX-ACCEPTANCE.md). Desktop wheel tests do not establish mobile support. Labels, document identity, export format and restored data remain configured through the existing host API; setup/file forms do not enter the mounted widget.
 
-### Planned widget presentation
+### Widget presentation
 
 The approved high-fidelity appearance is the default styling contract. Hosts configure colours (including the widget background), buttons, typography, spacing, borders and other named style tokens once through `mountReview(..., { styles })`. Omitted values use the exported, immutable `defaultReviewStyles`. Configuration is scoped to each mounted widget and does not change host-page styles, annotation data or other instances. See [24 — Instance style configuration](docs/plans/24-INSTANCE-STYLE-CONFIGURATION.md). Styling changes do not imply the new native-input gates have passed.
 
-The user selected **Inline whisper** for visual refinement: a discreet status attached to the passage explicitly shows `Selected · Not labeled yet` before classification and `Labeled · {actual configured label name}` afterward. Direction hints show both real label names, not generic left/right placeholders, and refresh from accepted host configuration changes. Swipe and keyboard remain primary; secondary controls expand inside the top navigation bar through ••• and collapse through that same button. Three top-bar patterns remain under discussion in [21 — Library widget design](docs/plans/21-LIBRARY-WIDGET-DESIGN.md), before high fidelity and implementation. No setup forms are introduced. Supporting live label-name updates requires a specified host update path that preserves stable identities; current reset/restore safeguards remain in force until that work is implemented.
+The user selected **Inline whisper** for visual refinement: a discreet status attached to the passage explicitly shows `Selected · Not labeled yet` before classification and `Labeled · {actual configured label name}` afterward. Direction hints show both real label names, not generic left/right placeholders, and refresh from accepted host configuration changes. Swipe and keyboard remain primary; secondary controls, including **Export files**, swap into the fixed-height top navigation bar through ••• and swap back through that same button. The approved high fidelity is [23](docs/plans/23-WIDGET-HIGH-FIDELITY.md); the navbar shows the optional `document.title`, falling back to `document.id`. No setup forms are introduced. Supporting live label-name updates requires a specified host update path that preserves stable identities; current reset/restore safeguards remain in force until that work is implemented.
 
 ### Capabilities and keyboard shortcuts — initial release
 
@@ -82,13 +82,14 @@ All shortcuts below ship in the initial release. “Mod” means Command on macO
 | Undo | Mod+Z | Reverse the latest committed creation, relabeling, or deletion. Cancel any pending selection first, then undo. |
 | Redo | Mod+Shift+Z; Ctrl+Y on Windows/Linux | Reapply an undone committed change. Cancel any pending selection first, then redo. |
 | Finish / Done | Mod+Enter | Run the same completion flow as the Done button, including resolution of pending selections. |
+| Export files | Mod+Shift+E | Emit the committed export through the host without completing the session. Pending selections stay pending and are excluded. |
 | Show shortcut help | F1 | Open the capability and shortcut reference within the annotator. Escape closes it. |
 
 Keyboard selection uses the same range model and commit path as mouse selection. Moving focus alone does not remove an active range. Toolbar controls preserve the selection when focused or activated.
 
 In precise text-selection mode, ordinary arrow keys move the caret and Shift+Arrow extends the range; they never classify text. The library supplies scoped caret navigation rather than requiring users to enable browser-wide caret browsing. Selection can extend across supported document blocks. Leaving the mode with F2 retains the current nonempty range; Escape cancels it.
 
-When a menu or dialog is open, its navigation takes priority. Escape first closes that surface (or cancels an active swipe) and only a subsequent Escape clears the underlying selection. Destructive commands act only on an explicitly active target; with no target, Delete and Backspace do nothing inside the document surface and do not navigate browser history.
+When a menu or dialog is open, its navigation takes priority. Escape first closes that surface and only a subsequent Escape clears the underlying selection. Destructive commands act only on an explicitly active target; with no target, Delete and Backspace do nothing inside the document surface and do not navigate browser history.
 
 Do not intercept shortcuts in editable fields, host application controls, or during IME composition. Prevent browser defaults only when handling an applicable annotator command. Hosts may remap conflicting shortcuts; controls and help must display the effective mapping. Verify the default mapping on supported browsers and operating systems before release.
 
@@ -96,7 +97,7 @@ Do not intercept shortcuts in editable fields, host application controls, or dur
 
 Done completes the session and produces the export payload. If a selection is still pending, the interface asks the user to label it or discard it before completion. A completed session may contain zero annotations.
 
-The mounted interface has no separate Export button or standalone export shortcut. Done automatically invokes the configured export/completion flow through the host. Keep the session available for retry if delivery fails. The library's programmatic export API remains available to hosts. This presentation correction is specified in plan 22; the existing production shortcut implementation is not changed by the lo-fi work.
+Done automatically invokes the configured export/completion flow through the host. Keep the session available for retry if delivery fails. The mounted interface also keeps a separate **Export files** control and `Mod+Shift+E` shortcut for intermediate exports that do not complete the session (user decision, [plan 25](docs/plans/25-ASSESSMENT-REMEDIATION.md); supersedes plan 22's removal). The library's programmatic export API remains available to hosts.
 
 The host application decides how to present downloads or save the returned data. Finishing must not silently lose annotations if saving fails; the current session remains available for retry.
 
@@ -118,8 +119,8 @@ Both appearances cover document text, code blocks, controls, dialogs, previews, 
 
 - Clicking a committed highlight selects that annotation for relabeling or deletion; it takes precedence over selecting the containing paragraph.
 - Beginning a new selection replaces the previous pending selection without committing it.
-- When a swipe is canceled, the pending selection stays active.
-- Overlapping committed selections are supported. Each retains its own range and label. A newly selected range takes precedence as the active swipe target. Clicking overlapping saved highlights opens a keyboard-accessible chooser for the annotation to edit; it never labels or deletes multiple annotations implicitly.
+- Scrolling that does not qualify as labeling input leaves the pending selection active.
+- Overlapping committed selections are supported. Each retains its own range and label. A newly selected range takes precedence as the horizontal-scroll labeling target. Clicking overlapping saved highlights opens a keyboard-accessible chooser for the annotation to edit; it never labels or deletes multiple annotations implicitly.
 - Links inside the annotation surface do not navigate on ordinary selection clicks. The host may provide a separate way to open links.
 
 These defaults complete the initial interaction contract. Local behavior validation covers replacement, saved-highlight precedence, the overlap chooser, canceled-swipe retention, and link-click suppression; see [core completion evidence](docs/CORE-COMPLETION.md). They remain proposed UX defaults rather than claimed user usability approval.
@@ -131,8 +132,8 @@ These defaults complete the initial interaction contract. Local behavior validat
 - Render a supplied Markdown document as selectable HTML.
 - Select entire paragraphs, headings, list items, and fenced code blocks with a click.
 - Select exact contiguous text ranges with click and drag.
-- Assign one of two preset labels through left/right swipes.
-- Preview the label before a swipe commits.
+- Assign one of two preset labels through native left/right horizontal scrolling over the pending selection.
+- Show both configured label names at their directions before assignment.
 - Preserve visible highlights for committed annotations.
 - Support overlapping selections with independent labels and an accessible overlap chooser.
 - Remove a pending selection without labeling it.
@@ -174,9 +175,7 @@ Click-to-select applies to paragraphs, headings, list items, and fenced code blo
 
 Maintain only one pending selection at a time. A selection must be nonempty and remain within the annotation container. Ignore interface controls and non-document text when calculating ranges.
 
-A gesture beginning without an active selection can establish a range but cannot label it in the same gesture. A subsequent gesture beginning on the active highlight can become a swipe. Vertical movement preserves normal scrolling; horizontal movement must exceed a documented distance and direction threshold to commit. Pointer cancellation must never commit an annotation.
-
-Exact pointer-gesture thresholds are implementation tuning values for the original prototype. They do not define the planned native horizontal-scroll desktop interaction; plans 17–20 supersede the affected input UX only after their gates pass. Selection alone remains uncommitted, and all classification continues through one shared command.
+A gesture that establishes a range cannot label it. Labeling requires a separate native horizontal scroll over the pending highlight, under the trigger rule above. Vertical movement preserves normal scrolling and never labels. Pointer drags, including those beginning on highlighted text, only select text. Selection alone remains uncommitted, and all classification continues through one shared command. The original pointer-drag swipe prototype (plan 07) is retired; touch labeling is plan 19 work.
 
 ### Annotation identity and anchoring
 
@@ -231,8 +230,8 @@ The core operates in the browser without a backend. Session persistence is owned
 
 1. A paragraph, heading, list item, or fenced code block click selects that block, while dragging preserves the exact selected range.
 2. A range crossing bold text, links, or paragraph boundaries exports the correct quote and positions.
-3. Selection alone creates no labeled annotation; each completed swipe creates exactly one committed annotation with the correct label.
-4. Canceled gestures and vertical scrolling create no annotations.
+3. Selection alone creates no labeled annotation; each qualifying horizontal scroll over pending text creates exactly one committed annotation with the correct label.
+4. Pointer drags, vertical or mixed-axis scrolling and zoom input create no annotations.
 5. Relabel, delete, undo, and redo produce consistent highlights and exports.
 6. Done resolves pending selections and returns every committed annotation exactly once.
 7. Export and restore on the same document version preserve identity, labels, positions, and quotes.

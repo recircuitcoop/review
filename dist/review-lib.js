@@ -1,3 +1,431 @@
+// src/model.js
+var copy = (value) => structuredClone(value);
+var freeze = (record) => Object.freeze(record);
+var compare = (a, b2) => a.start - b2.start || a.end - b2.end || (a.id < b2.id ? -1 : a.id > b2.id ? 1 : 0);
+var requiredString = (value) => typeof value === "string" && value.trim().length > 0;
+function validateOptions({ document: document2, labels }) {
+  if (!document2 || !requiredString(document2.id) || !requiredString(document2.version)) throw new Error("Document ID and immutable version are required.");
+  if (!Array.isArray(labels) || labels.length !== 2 || labels.some((l) => !l || !requiredString(l.id) || !requiredString(l.name))) throw new Error("Exactly two labels with IDs and names are required.");
+  if (new Set(labels.map((l) => l.id)).size !== 2 || new Set(labels.map((l) => l.direction)).size !== 2 || labels.some((l) => !["left", "right"].includes(l.direction))) throw new Error("Labels need distinct IDs and one left/right assignment each.");
+}
+var ReviewSession = class {
+  #annotations = [];
+  #pending = null;
+  #activeId = null;
+  #undo = [];
+  #redo = [];
+  #document;
+  #labels;
+  #emit;
+  #revision = 0;
+  constructor({ document: document2, labels, text: text2 }, onEvent = () => {
+  }) {
+    validateOptions({ document: document2, labels });
+    if (typeof text2 !== "string") throw new Error("Canonical text must be a string.");
+    this.#document = { id: document2.id, version: document2.version, text: text2, canonicalFormat: "review-text-v1", offsetUnit: "utf-16", endExclusive: true };
+    this.#labels = labels.map(({ id, name, direction }) => ({ id, name, direction }));
+    this.#emit = (name, detail) => onEvent(name, copy(detail));
+  }
+  get pending() {
+    return copy(this.#pending);
+  }
+  get activeId() {
+    return this.#activeId;
+  }
+  get text() {
+    return this.#document.text;
+  }
+  get labels() {
+    return copy(this.#labels);
+  }
+  get revision() {
+    return this.#revision;
+  }
+  read() {
+    return copy([...this.#annotations].sort(compare));
+  }
+  anchor(start, end) {
+    const text2 = this.text;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > text2.length || start >= end) throw new Error("Selection needs a nonempty in-document integer range.");
+    return { start, end, quote: text2.slice(start, end), prefix: text2.slice(Math.max(0, start - 32), start), suffix: text2.slice(end, end + 32) };
+  }
+  select(start, end) {
+    const pending = this.anchor(start, end);
+    this.#pending = pending;
+    this.#activeId = null;
+    this.#emit("selection", pending);
+    return copy(pending);
+  }
+  clear() {
+    this.#pending = null;
+    this.#activeId = null;
+    this.#emit("selection", null);
+  }
+  activate(id) {
+    if (!this.#annotations.some((a) => a.id === id)) throw new Error("Unknown annotation ID.");
+    this.#pending = null;
+    this.#activeId = id;
+    this.#emit("selection", { annotationId: id });
+  }
+  #commit(next) {
+    const previous = this.#annotations;
+    this.#undo.push(previous);
+    this.#redo = [];
+    this.#annotations = next;
+    this.#revision++;
+    this.#changes(previous, next);
+  }
+  #changes(previous, next) {
+    for (const a of previous) if (!next.some((b2) => b2.id === a.id)) this.#emit("delete", a);
+    for (const a of next) {
+      const old = previous.find((b2) => b2.id === a.id);
+      if (!old) this.#emit("create", a);
+      else if (old.labelId !== a.labelId) this.#emit("update", a);
+    }
+  }
+  classify(labelId) {
+    if (!this.#labels.some((l) => l.id === labelId)) throw new Error("Unknown label ID.");
+    if (this.#pending) {
+      const annotation = freeze({ id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...this.#pending });
+      this.#pending = null;
+      this.#activeId = null;
+      this.#commit([...this.#annotations, annotation]);
+      this.clear();
+      return copy(annotation);
+    }
+    if (this.#activeId) return this.relabel(this.#activeId, labelId);
+    return null;
+  }
+  relabel(id, labelId) {
+    const target = this.#annotations.find((a) => a.id === id);
+    if (!target) throw new Error("Unknown annotation ID.");
+    if (!this.#labels.some((l) => l.id === labelId)) throw new Error("Unknown label ID.");
+    if (target.labelId === labelId) return copy(target);
+    this.#commit(this.#annotations.map((a) => a.id === id ? freeze({ ...a, labelId }) : a));
+    return copy(this.#annotations.find((a) => a.id === id));
+  }
+  delete(id) {
+    if (!this.#annotations.some((a) => a.id === id)) throw new Error("Unknown annotation ID.");
+    this.#commit(this.#annotations.filter((a) => a.id !== id));
+    if (this.#activeId === id) this.clear();
+  }
+  #travel(from, to) {
+    this.clear();
+    if (!from.length) return false;
+    const previous = this.#annotations;
+    to.push(previous);
+    this.#annotations = from.pop();
+    this.#revision++;
+    this.#changes(previous, this.#annotations);
+    return true;
+  }
+  undo() {
+    return this.#travel(this.#undo, this.#redo);
+  }
+  redo() {
+    return this.#travel(this.#redo, this.#undo);
+  }
+  export(format = "grouped") {
+    if (!["grouped", "split"].includes(format)) throw new Error("Export format must be grouped or split.");
+    const base = { schemaVersion: 1, document: copy(this.#document), labels: this.labels };
+    const selections = Object.fromEntries(this.#labels.map((l) => [l.id, this.read().filter((a) => a.labelId === l.id)]));
+    if (format === "split") return this.#labels.map((l) => ({ ...copy(base), selections: { [l.id]: selections[l.id] } }));
+    return { ...base, selections };
+  }
+  restore(input) {
+    const payloads = Array.isArray(input) ? input : [input];
+    if (payloads.length !== (Array.isArray(input) ? 2 : 1)) throw new Error("Restore needs a grouped payload or both split payloads.");
+    const annotations = [], groups = /* @__PURE__ */ new Set(), ids = /* @__PURE__ */ new Set();
+    for (const payload of payloads) {
+      if (!payload || payload.schemaVersion !== 1 || !payload.document || Object.entries(this.#document).some(([key, value]) => payload.document[key] !== value)) throw new Error("Restore document identity, version, canonical text, or format does not match.");
+      if (!Array.isArray(payload.labels) || payload.labels.length !== 2 || new Set(payload.labels.map((l) => l?.id)).size !== 2 || this.#labels.some((label) => !payload.labels.some((candidate) => candidate && ["id", "name", "direction"].every((key) => candidate[key] === label[key])))) throw new Error("Restore labels do not match this session.");
+      if (!payload.selections || typeof payload.selections !== "object" || Array.isArray(payload.selections)) throw new Error("Restore selections must be grouped by label ID.");
+      if (Array.isArray(input) && Object.keys(payload.selections).length !== 1) throw new Error("Each split payload must contain one label group.");
+      for (const [labelId, values] of Object.entries(payload.selections)) {
+        if (!this.#labels.some((l) => l.id === labelId) || groups.has(labelId) || !Array.isArray(values)) throw new Error("Invalid or duplicate restore label group.");
+        groups.add(labelId);
+        for (const a of values) {
+          if (!a || !requiredString(a.id) || ids.has(a.id) || a.labelId !== labelId || a.documentId !== this.#document.id || a.documentVersion !== this.#document.version) throw new Error("Invalid annotation identity, label, or duplicate ID.");
+          const anchor = this.anchor(a.start, a.end);
+          for (const field of ["quote", "prefix", "suffix"]) if (a[field] !== anchor[field]) throw new Error(`Annotation ${a.id}: ${field} does not match its positions.`);
+          ids.add(a.id);
+          annotations.push(freeze({ id: a.id, documentId: a.documentId, documentVersion: a.documentVersion, labelId, ...anchor }));
+        }
+      }
+    }
+    if (groups.size !== 2) throw new Error("Restore must include both label groups, including empty groups.");
+    this.#annotations = annotations.sort(compare);
+    this.#revision++;
+    this.#undo = [];
+    this.#redo = [];
+    this.clear();
+  }
+};
+
+// src/text.js
+var BLOCKS = /* @__PURE__ */ new Set(["P", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "BLOCKQUOTE", "PRE"]);
+function canonicalText(root) {
+  const segments = [];
+  let text2 = "";
+  const append = (value, node, kind = "text") => {
+    if (!value) return;
+    segments.push({ node, kind, start: text2.length, end: text2.length + value.length });
+    text2 += value;
+  };
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const betweenBlocks = /^\s*$/.test(node.data) && [...node.parentElement.children].some((c) => BLOCKS.has(c.tagName) || ["UL", "OL"].includes(c.tagName));
+      if (!betweenBlocks) append(node.data, node);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    if (node.tagName === "BR") {
+      append("\n", node, "br");
+      return;
+    }
+    for (const child of node.childNodes) walk(child);
+    if (BLOCKS.has(node.tagName) && segments.at(-1)?.kind !== "separator") append("\n", node, "separator");
+  }
+  for (const node of root.childNodes) walk(node);
+  while (segments.at(-1)?.kind === "separator") text2 = text2.slice(0, segments.pop().start);
+  function boundary(segment, end) {
+    if (segment.kind === "text") return [segment.node, end ? segment.node.data.length : 0];
+    const parent = segment.node.parentNode;
+    const index = [...parent.childNodes].indexOf(segment.node);
+    return [parent, index + (segment.kind === "separator" || end ? 1 : 0)];
+  }
+  function offset(node, position) {
+    if (node !== root && !root.contains(node)) throw new Error("Selection is outside the document.");
+    const direct = segments.find((s) => s.node === node && s.kind === "text");
+    if (direct) return direct.start + Math.min(position, node.data.length);
+    const point2 = document.createRange();
+    point2.setStart(node, position);
+    point2.collapse(true);
+    let result = 0;
+    for (const s of segments) {
+      const edge = document.createRange();
+      edge.setStart(...boundary(s, true));
+      edge.collapse(true);
+      if (edge.compareBoundaryPoints(Range.START_TO_START, point2) <= 0) result = s.end;
+      else break;
+    }
+    return result;
+  }
+  function point(position, end) {
+    if (position < 0 || position > text2.length) throw new Error("Text position is outside the document.");
+    const s = segments.find((s2) => s2.kind === "text" && (end ? position > s2.start && position <= s2.end : position >= s2.start && position < s2.end));
+    if (s) return [s.node, position - s.start];
+    const next = segments.find((s2) => s2.start >= position && s2.kind === "text");
+    if (!end && next) return [next.node, 0];
+    const previous = segments.filter((s2) => s2.end <= position && s2.kind === "text").at(-1);
+    if (previous) return [previous.node, previous.node.data.length];
+    return next ? [next.node, 0] : [root, 0];
+  }
+  return {
+    text: text2,
+    offset,
+    range(start, end) {
+      const range = document.createRange();
+      range.setStart(...point(start, false));
+      range.setEnd(...point(end, true));
+      return range;
+    },
+    fromRange(range) {
+      return { start: offset(range.startContainer, range.startOffset), end: offset(range.endContainer, range.endOffset) };
+    }
+  };
+}
+
+// src/styles.js
+var tokens = {
+  background: ["--review-panel", "background-color", "light-dark(#fffefa, #1c201f)"],
+  surfaceBackground: ["--review-subtle", "background-color", "light-dark(#f1f4ef, #282f2b)"],
+  toolbarBackground: ["--review-toolbar-bg", "background-color", "light-dark(#f8f9f5, #202623)"],
+  textColor: ["--review-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  mutedColor: ["--review-muted", "color", "light-dark(#626e68, #a5b3ac)"],
+  borderColor: ["--review-border", "border-color", "light-dark(#dce2dc, #3b4640)"],
+  focusColor: ["--review-focus", "color", "light-dark(#315da5, #98baff)"],
+  linkColor: ["--review-link", "color", "light-dark(#226453, #a0d7bd)"],
+  codeBackground: ["--review-code", "background-color", "light-dark(#f1f4ef, #282f2b)"],
+  buttonBackground: ["--review-button-bg", "background-color", "transparent"],
+  buttonTextColor: ["--review-button-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  buttonHoverBackground: ["--review-button-hover", "background-color", "light-dark(#f1f4ef, #282f2b)"],
+  buttonBorderColor: ["--review-button-border", "border-color", "transparent"],
+  primaryBackground: ["--review-primary", "background-color", "light-dark(#263f35, #c8dfd0)"],
+  primaryHoverBackground: ["--review-primary-hover", "background-color", "light-dark(#263f35, #c8dfd0)"],
+  primaryTextColor: ["--review-on-primary", "color", "light-dark(#fffefa, #192c22)"],
+  leftBackground: ["--review-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
+  leftTextColor: ["--review-left-text", "color", "light-dark(#226453, #a0d7bd)"],
+  leftBorderColor: ["--review-left-border", "border-color", "transparent"],
+  rightBackground: ["--review-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
+  rightTextColor: ["--review-right-text", "color", "light-dark(#885634, #e7ba92)"],
+  rightBorderColor: ["--review-right-border", "border-color", "transparent"],
+  activeBackground: ["--review-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
+  activeTextColor: ["--review-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  activeBorderColor: ["--review-active-border", "border-color", "light-dark(#74826f, #a5b3ac)"],
+  highlightLeftBackground: ["--review-mark-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
+  highlightLeftTextColor: ["--review-mark-left-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  highlightLeftBorderColor: ["--review-mark-left-border", "color", "light-dark(#226453, #a0d7bd)"],
+  highlightRightBackground: ["--review-mark-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
+  highlightRightTextColor: ["--review-mark-right-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  highlightRightBorderColor: ["--review-mark-right-border", "color", "light-dark(#885634, #e7ba92)"],
+  highlightPendingBackground: ["--review-mark-pending-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
+  highlightPendingTextColor: ["--review-mark-pending-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  highlightActiveBackground: ["--review-mark-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
+  highlightActiveTextColor: ["--review-mark-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
+  backdropColor: ["--review-backdrop", "color", "light-dark(#15271d55, #00000099)"],
+  shadowColor: ["--review-shadow", "color", "light-dark(#1c302012, #00000033)"],
+  boxShadow: ["--review-box-shadow", "box-shadow", "0 8px 28px light-dark(#1c302012, #00000033)"],
+  fontFamily: ["--review-font-family", "font-family", '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'],
+  fontSize: ["--review-font-size", "font-size", "14px"],
+  lineHeight: ["--review-line-height", "line-height", "1.65"],
+  documentFontFamily: ["--review-document-font", "font-family", '"Iowan Old Style", "Palatino Linotype", Georgia, serif'],
+  documentFontSize: ["--review-document-size", "font-size", "16px"],
+  documentLineHeight: ["--review-document-line-height", "line-height", "1.85"],
+  headingFontFamily: ["--review-heading-font", "font-family", "system-ui, sans-serif"],
+  headingFontSize: ["--review-heading-size", "font-size", "27px"],
+  headingLineHeight: ["--review-heading-line-height", "line-height", "1.3"],
+  headingLetterSpacing: ["--review-heading-spacing", "letter-spacing", "-.025em"],
+  codeFontFamily: ["--review-code-font", "font-family", "ui-monospace, SFMono-Regular, monospace"],
+  codeFontSize: ["--review-code-size", "font-size", "12px"],
+  codeLineHeight: ["--review-code-line-height", "line-height", "1.8"],
+  smallFontSize: ["--review-small-size", "font-size", "12px"],
+  buttonFontSize: ["--review-button-size", "font-size", "12px"],
+  borderWidth: ["--review-border-width", "border-top-width", "1px"],
+  borderRadius: ["--review-radius", "border-radius", "12px"],
+  buttonBorderWidth: ["--review-button-border-width", "border-top-width", "1px"],
+  buttonRadius: ["--review-button-radius", "border-radius", "6px"],
+  codeRadius: ["--review-code-radius", "border-radius", "7px"],
+  dialogRadius: ["--review-dialog-radius", "border-radius", "12px"],
+  focusWidth: ["--review-focus-width", "outline-width", "3px"],
+  focusOffset: ["--review-focus-offset", "outline-offset", "3px"],
+  documentPadding: ["--review-document-padding", "padding", "36px 38px 26px"],
+  narrowDocumentPadding: ["--review-narrow-document-padding", "padding", "28px 22px 24px"],
+  navbarHeight: ["--review-navbar-height", "height", "62px"],
+  toolbarPadding: ["--review-toolbar-padding", "padding", "9px 18px"],
+  toolbarGap: ["--review-toolbar-gap", "gap", "8px"],
+  buttonPadding: ["--review-button-padding", "padding", "7px 9px"],
+  paragraphSpacing: ["--review-paragraph-spacing", "margin-bottom", "24px"],
+  codePadding: ["--review-code-padding", "padding", "16px 18px"],
+  dialogPadding: ["--review-dialog-padding", "padding", "22px"],
+  sidebarPadding: ["--review-sidebar-padding", "padding", "16px"],
+  statusPadding: ["--review-status-padding", "padding", "12px 18px"],
+  colorScheme: ["color-scheme", "color-scheme", "inherit"]
+};
+var defaultReviewStyles = Object.freeze(Object.fromEntries(Object.entries(tokens).map(([name, [, , value]]) => [name, value])));
+function resolveReviewStyles(overrides = {}) {
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides) || ![Object.prototype, null].includes(Object.getPrototypeOf(overrides))) throw new Error("Styles must be a map of named CSS values.");
+  for (const [name, value] of Object.entries(overrides)) {
+    if (!Object.hasOwn(tokens, name)) throw new Error(`Unknown style: ${name}`);
+    if (typeof value !== "string" || !value.trim()) throw new Error(`Style ${name} must be a nonempty CSS string.`);
+    if (name === "colorScheme" && !["inherit", "light", "dark"].includes(value.trim())) throw new Error("Style colorScheme must be inherit, light or dark.");
+    if (name !== "colorScheme" && /^(inherit|initial|unset|revert|revert-layer)$/i.test(value.trim())) throw new Error(`Style ${name} cannot use a CSS reset keyword.`);
+  }
+  return { ...defaultReviewStyles, ...overrides };
+}
+function applyReviewStyles(root, overrides) {
+  const styles = resolveReviewStyles(overrides);
+  for (const [name, value] of Object.entries(styles)) if (!CSS.supports(tokens[name][1], value)) throw new Error(`Invalid CSS value for style ${name}: ${value}`);
+  for (const [name, value] of Object.entries(styles)) root.style.setProperty(tokens[name][0], value);
+}
+
+// src/shortcuts.js
+var DEFAULT_SHORTCUTS = {
+  nextBlock: ["Alt+ArrowDown"],
+  previousBlock: ["Alt+ArrowUp"],
+  selectBlock: ["Enter"],
+  precise: ["F2"],
+  left: ["Alt+ArrowLeft"],
+  right: ["Alt+ArrowRight"],
+  clear: ["Escape"],
+  remove: ["Delete", "Backspace"],
+  nextAnnotation: ["Alt+N"],
+  previousAnnotation: ["Alt+P"],
+  undo: ["Mod+Z"],
+  redo: ["Mod+Shift+Z", "Ctrl+Y"],
+  export: ["Mod+Shift+E"],
+  finish: ["Mod+Enter"],
+  help: ["F1"]
+};
+var MODIFIERS = ["ctrl", "alt", "shift", "meta"];
+function applyOverrides(effective, overrides) {
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    throw new Error("Shortcut overrides must be a command map.");
+  }
+  for (const [command, value] of Object.entries(overrides)) {
+    if (!Object.hasOwn(effective, command)) {
+      throw new Error(`Unknown shortcut command: ${command}`);
+    }
+    const keys = typeof value === "string" ? [value] : value;
+    const valid = Array.isArray(keys) && keys.length > 0 && keys.every((key) => typeof key === "string" && key.trim());
+    if (!valid) {
+      throw new Error(`Invalid shortcut for ${command}.`);
+    }
+    effective[command] = [...keys];
+  }
+}
+function normalizeChord(value, mac) {
+  const parts = value.toLowerCase().replaceAll("mod", mac ? "meta" : "ctrl").split("+");
+  const key = parts.pop();
+  const unknownModifier = parts.some((part) => !MODIFIERS.includes(part));
+  const repeatedModifier = new Set(parts).size !== parts.length;
+  if (!key || unknownModifier || repeatedModifier) {
+    throw new Error(`Invalid shortcut: ${value}`);
+  }
+  return [...parts.sort(), key].join("+");
+}
+function eventChord(event) {
+  const modifiers = [];
+  if (event.ctrlKey) modifiers.push("ctrl");
+  if (event.altKey) modifiers.push("alt");
+  if (event.shiftKey) modifiers.push("shift");
+  if (event.metaKey) modifiers.push("meta");
+  return [...modifiers.sort(), event.key.toLowerCase()].join("+");
+}
+function displayChord(chord, mac) {
+  return chord.replace(/\bmod\b/gi, mac ? "Cmd" : "Ctrl").replace(/\bmeta\b/gi, mac ? "Cmd" : "Meta");
+}
+function isApplePlatform() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || "";
+  return /^(mac|iphone|ipad|ios)/i.test(platform);
+}
+function ariaChords(keys, mac) {
+  return keys.join(" ").replace(/\bmod\b/gi, mac ? "Meta" : "Control").replace(/\bctrl\b/gi, "Control");
+}
+function shortcutMap(overrides = {}) {
+  const mac = isApplePlatform();
+  const effective = structuredClone(DEFAULT_SHORTCUTS);
+  if (mac) {
+    effective.redo = ["Mod+Shift+Z"];
+  }
+  applyOverrides(effective, overrides);
+  const bindings = /* @__PURE__ */ new Map();
+  for (const [command, values] of Object.entries(effective)) {
+    for (const value of values) {
+      const chord = normalizeChord(value, mac);
+      if (bindings.has(chord)) {
+        throw new Error(`Shortcut conflict: ${value}`);
+      }
+      bindings.set(chord, command);
+    }
+  }
+  const display = {};
+  const aria = {};
+  for (const [command, keys] of Object.entries(effective)) {
+    display[command] = keys.map((key) => displayChord(key, mac));
+    aria[command] = ariaChords(keys, mac);
+  }
+  return {
+    effective,
+    display,
+    aria,
+    mac,
+    command(event) {
+      return bindings.get(eventChord(event));
+    }
+  };
+}
+
 // node_modules/marked/lib/marked.esm.js
 function M() {
   return { async: false, breaks: false, extensions: null, gfm: true, hooks: null, pedantic: false, renderer: null, silent: false, tokenizer: null, walkTokens: null };
@@ -1213,7 +1641,7 @@ var {
   getOwnPropertyDescriptor
 } = Object;
 var {
-  freeze,
+  freeze: freeze2,
   seal,
   create
 } = Object;
@@ -1221,8 +1649,8 @@ var {
   apply,
   construct
 } = typeof Reflect !== "undefined" && Reflect;
-if (!freeze) {
-  freeze = function freeze2(x2) {
+if (!freeze2) {
+  freeze2 = function freeze3(x2) {
     return x2;
   };
 }
@@ -1344,17 +1772,17 @@ function lookupGetter(object, prop) {
   }
   return fallbackValue;
 }
-var html$1 = freeze(["a", "abbr", "acronym", "address", "area", "article", "aside", "audio", "b", "bdi", "bdo", "big", "blink", "blockquote", "body", "br", "button", "canvas", "caption", "center", "cite", "code", "col", "colgroup", "content", "data", "datalist", "dd", "decorator", "del", "details", "dfn", "dialog", "dir", "div", "dl", "dt", "element", "em", "fieldset", "figcaption", "figure", "font", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html", "i", "img", "input", "ins", "kbd", "label", "legend", "li", "main", "map", "mark", "marquee", "menu", "menuitem", "meter", "nav", "nobr", "ol", "optgroup", "option", "output", "p", "picture", "pre", "progress", "q", "rp", "rt", "ruby", "s", "samp", "search", "section", "select", "shadow", "slot", "small", "source", "spacer", "span", "strike", "strong", "style", "sub", "summary", "sup", "table", "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "time", "tr", "track", "tt", "u", "ul", "var", "video", "wbr"]);
-var svg$1 = freeze(["svg", "a", "altglyph", "altglyphdef", "altglyphitem", "animatecolor", "animatemotion", "animatetransform", "circle", "clippath", "defs", "desc", "ellipse", "enterkeyhint", "exportparts", "filter", "font", "g", "glyph", "glyphref", "hkern", "image", "inputmode", "line", "lineargradient", "marker", "mask", "metadata", "mpath", "part", "path", "pattern", "polygon", "polyline", "radialgradient", "rect", "stop", "style", "switch", "symbol", "text", "textpath", "title", "tref", "tspan", "view", "vkern"]);
-var svgFilters = freeze(["feBlend", "feColorMatrix", "feComponentTransfer", "feComposite", "feConvolveMatrix", "feDiffuseLighting", "feDisplacementMap", "feDistantLight", "feDropShadow", "feFlood", "feFuncA", "feFuncB", "feFuncG", "feFuncR", "feGaussianBlur", "feImage", "feMerge", "feMergeNode", "feMorphology", "feOffset", "fePointLight", "feSpecularLighting", "feSpotLight", "feTile", "feTurbulence"]);
-var svgDisallowed = freeze(["animate", "color-profile", "cursor", "discard", "font-face", "font-face-format", "font-face-name", "font-face-src", "font-face-uri", "foreignobject", "hatch", "hatchpath", "mesh", "meshgradient", "meshpatch", "meshrow", "missing-glyph", "script", "set", "solidcolor", "unknown", "use"]);
-var mathMl$1 = freeze(["math", "menclose", "merror", "mfenced", "mfrac", "mglyph", "mi", "mlabeledtr", "mmultiscripts", "mn", "mo", "mover", "mpadded", "mphantom", "mroot", "mrow", "ms", "mspace", "msqrt", "mstyle", "msub", "msup", "msubsup", "mtable", "mtd", "mtext", "mtr", "munder", "munderover", "mprescripts"]);
-var mathMlDisallowed = freeze(["maction", "maligngroup", "malignmark", "mlongdiv", "mscarries", "mscarry", "msgroup", "mstack", "msline", "msrow", "semantics", "annotation", "annotation-xml", "mprescripts", "none"]);
-var text = freeze(["#text"]);
-var html = freeze(["accept", "action", "align", "alt", "autocapitalize", "autocomplete", "autopictureinpicture", "autoplay", "background", "bgcolor", "border", "capture", "cellpadding", "cellspacing", "checked", "cite", "class", "clear", "color", "cols", "colspan", "controls", "controlslist", "coords", "crossorigin", "datetime", "decoding", "default", "dir", "disabled", "disablepictureinpicture", "disableremoteplayback", "download", "draggable", "enctype", "enterkeyhint", "exportparts", "face", "for", "headers", "height", "hidden", "high", "href", "hreflang", "id", "inert", "inputmode", "integrity", "ismap", "kind", "label", "lang", "list", "loading", "loop", "low", "max", "maxlength", "media", "method", "min", "minlength", "multiple", "muted", "name", "nonce", "noshade", "novalidate", "nowrap", "open", "optimum", "part", "pattern", "placeholder", "playsinline", "popover", "popovertarget", "popovertargetaction", "poster", "preload", "pubdate", "radiogroup", "readonly", "rel", "required", "rev", "reversed", "role", "rows", "rowspan", "spellcheck", "scope", "selected", "shape", "size", "sizes", "slot", "span", "srclang", "start", "src", "srcset", "step", "style", "summary", "tabindex", "title", "translate", "type", "usemap", "valign", "value", "width", "wrap", "xmlns", "slot"]);
-var svg = freeze(["accent-height", "accumulate", "additive", "alignment-baseline", "amplitude", "ascent", "attributename", "attributetype", "azimuth", "basefrequency", "baseline-shift", "begin", "bias", "by", "class", "clip", "clippathunits", "clip-path", "clip-rule", "color", "color-interpolation", "color-interpolation-filters", "color-profile", "color-rendering", "cx", "cy", "d", "dx", "dy", "diffuseconstant", "direction", "display", "divisor", "dur", "edgemode", "elevation", "end", "exponent", "fill", "fill-opacity", "fill-rule", "filter", "filterunits", "flood-color", "flood-opacity", "font-family", "font-size", "font-size-adjust", "font-stretch", "font-style", "font-variant", "font-weight", "fx", "fy", "g1", "g2", "glyph-name", "glyphref", "gradientunits", "gradienttransform", "height", "href", "id", "image-rendering", "in", "in2", "intercept", "k", "k1", "k2", "k3", "k4", "kerning", "keypoints", "keysplines", "keytimes", "lang", "lengthadjust", "letter-spacing", "kernelmatrix", "kernelunitlength", "lighting-color", "local", "marker-end", "marker-mid", "marker-start", "markerheight", "markerunits", "markerwidth", "maskcontentunits", "maskunits", "max", "mask", "mask-type", "media", "method", "mode", "min", "name", "numoctaves", "offset", "operator", "opacity", "order", "orient", "orientation", "origin", "overflow", "paint-order", "path", "pathlength", "patterncontentunits", "patterntransform", "patternunits", "points", "preservealpha", "preserveaspectratio", "primitiveunits", "r", "rx", "ry", "radius", "refx", "refy", "repeatcount", "repeatdur", "restart", "result", "rotate", "scale", "seed", "shape-rendering", "slope", "specularconstant", "specularexponent", "spreadmethod", "startoffset", "stddeviation", "stitchtiles", "stop-color", "stop-opacity", "stroke-dasharray", "stroke-dashoffset", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "stroke-opacity", "stroke", "stroke-width", "style", "surfacescale", "systemlanguage", "tabindex", "tablevalues", "targetx", "targety", "transform", "transform-origin", "text-anchor", "text-decoration", "text-rendering", "textlength", "type", "u1", "u2", "unicode", "values", "viewbox", "visibility", "version", "vert-adv-y", "vert-origin-x", "vert-origin-y", "width", "word-spacing", "wrap", "writing-mode", "xchannelselector", "ychannelselector", "x", "x1", "x2", "xmlns", "y", "y1", "y2", "z", "zoomandpan"]);
-var mathMl = freeze(["accent", "accentunder", "align", "bevelled", "close", "columnsalign", "columnlines", "columnspan", "denomalign", "depth", "dir", "display", "displaystyle", "encoding", "fence", "frame", "height", "href", "id", "largeop", "length", "linethickness", "lspace", "lquote", "mathbackground", "mathcolor", "mathsize", "mathvariant", "maxsize", "minsize", "movablelimits", "notation", "numalign", "open", "rowalign", "rowlines", "rowspacing", "rowspan", "rspace", "rquote", "scriptlevel", "scriptminsize", "scriptsizemultiplier", "selection", "separator", "separators", "stretchy", "subscriptshift", "supscriptshift", "symmetric", "voffset", "width", "xmlns"]);
-var xml = freeze(["xlink:href", "xml:id", "xlink:title", "xml:space", "xmlns:xlink"]);
+var html$1 = freeze2(["a", "abbr", "acronym", "address", "area", "article", "aside", "audio", "b", "bdi", "bdo", "big", "blink", "blockquote", "body", "br", "button", "canvas", "caption", "center", "cite", "code", "col", "colgroup", "content", "data", "datalist", "dd", "decorator", "del", "details", "dfn", "dialog", "dir", "div", "dl", "dt", "element", "em", "fieldset", "figcaption", "figure", "font", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html", "i", "img", "input", "ins", "kbd", "label", "legend", "li", "main", "map", "mark", "marquee", "menu", "menuitem", "meter", "nav", "nobr", "ol", "optgroup", "option", "output", "p", "picture", "pre", "progress", "q", "rp", "rt", "ruby", "s", "samp", "search", "section", "select", "shadow", "slot", "small", "source", "spacer", "span", "strike", "strong", "style", "sub", "summary", "sup", "table", "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "time", "tr", "track", "tt", "u", "ul", "var", "video", "wbr"]);
+var svg$1 = freeze2(["svg", "a", "altglyph", "altglyphdef", "altglyphitem", "animatecolor", "animatemotion", "animatetransform", "circle", "clippath", "defs", "desc", "ellipse", "enterkeyhint", "exportparts", "filter", "font", "g", "glyph", "glyphref", "hkern", "image", "inputmode", "line", "lineargradient", "marker", "mask", "metadata", "mpath", "part", "path", "pattern", "polygon", "polyline", "radialgradient", "rect", "stop", "style", "switch", "symbol", "text", "textpath", "title", "tref", "tspan", "view", "vkern"]);
+var svgFilters = freeze2(["feBlend", "feColorMatrix", "feComponentTransfer", "feComposite", "feConvolveMatrix", "feDiffuseLighting", "feDisplacementMap", "feDistantLight", "feDropShadow", "feFlood", "feFuncA", "feFuncB", "feFuncG", "feFuncR", "feGaussianBlur", "feImage", "feMerge", "feMergeNode", "feMorphology", "feOffset", "fePointLight", "feSpecularLighting", "feSpotLight", "feTile", "feTurbulence"]);
+var svgDisallowed = freeze2(["animate", "color-profile", "cursor", "discard", "font-face", "font-face-format", "font-face-name", "font-face-src", "font-face-uri", "foreignobject", "hatch", "hatchpath", "mesh", "meshgradient", "meshpatch", "meshrow", "missing-glyph", "script", "set", "solidcolor", "unknown", "use"]);
+var mathMl$1 = freeze2(["math", "menclose", "merror", "mfenced", "mfrac", "mglyph", "mi", "mlabeledtr", "mmultiscripts", "mn", "mo", "mover", "mpadded", "mphantom", "mroot", "mrow", "ms", "mspace", "msqrt", "mstyle", "msub", "msup", "msubsup", "mtable", "mtd", "mtext", "mtr", "munder", "munderover", "mprescripts"]);
+var mathMlDisallowed = freeze2(["maction", "maligngroup", "malignmark", "mlongdiv", "mscarries", "mscarry", "msgroup", "mstack", "msline", "msrow", "semantics", "annotation", "annotation-xml", "mprescripts", "none"]);
+var text = freeze2(["#text"]);
+var html = freeze2(["accept", "action", "align", "alt", "autocapitalize", "autocomplete", "autopictureinpicture", "autoplay", "background", "bgcolor", "border", "capture", "cellpadding", "cellspacing", "checked", "cite", "class", "clear", "color", "cols", "colspan", "controls", "controlslist", "coords", "crossorigin", "datetime", "decoding", "default", "dir", "disabled", "disablepictureinpicture", "disableremoteplayback", "download", "draggable", "enctype", "enterkeyhint", "exportparts", "face", "for", "headers", "height", "hidden", "high", "href", "hreflang", "id", "inert", "inputmode", "integrity", "ismap", "kind", "label", "lang", "list", "loading", "loop", "low", "max", "maxlength", "media", "method", "min", "minlength", "multiple", "muted", "name", "nonce", "noshade", "novalidate", "nowrap", "open", "optimum", "part", "pattern", "placeholder", "playsinline", "popover", "popovertarget", "popovertargetaction", "poster", "preload", "pubdate", "radiogroup", "readonly", "rel", "required", "rev", "reversed", "role", "rows", "rowspan", "spellcheck", "scope", "selected", "shape", "size", "sizes", "slot", "span", "srclang", "start", "src", "srcset", "step", "style", "summary", "tabindex", "title", "translate", "type", "usemap", "valign", "value", "width", "wrap", "xmlns", "slot"]);
+var svg = freeze2(["accent-height", "accumulate", "additive", "alignment-baseline", "amplitude", "ascent", "attributename", "attributetype", "azimuth", "basefrequency", "baseline-shift", "begin", "bias", "by", "class", "clip", "clippathunits", "clip-path", "clip-rule", "color", "color-interpolation", "color-interpolation-filters", "color-profile", "color-rendering", "cx", "cy", "d", "dx", "dy", "diffuseconstant", "direction", "display", "divisor", "dur", "edgemode", "elevation", "end", "exponent", "fill", "fill-opacity", "fill-rule", "filter", "filterunits", "flood-color", "flood-opacity", "font-family", "font-size", "font-size-adjust", "font-stretch", "font-style", "font-variant", "font-weight", "fx", "fy", "g1", "g2", "glyph-name", "glyphref", "gradientunits", "gradienttransform", "height", "href", "id", "image-rendering", "in", "in2", "intercept", "k", "k1", "k2", "k3", "k4", "kerning", "keypoints", "keysplines", "keytimes", "lang", "lengthadjust", "letter-spacing", "kernelmatrix", "kernelunitlength", "lighting-color", "local", "marker-end", "marker-mid", "marker-start", "markerheight", "markerunits", "markerwidth", "maskcontentunits", "maskunits", "max", "mask", "mask-type", "media", "method", "mode", "min", "name", "numoctaves", "offset", "operator", "opacity", "order", "orient", "orientation", "origin", "overflow", "paint-order", "path", "pathlength", "patterncontentunits", "patterntransform", "patternunits", "points", "preservealpha", "preserveaspectratio", "primitiveunits", "r", "rx", "ry", "radius", "refx", "refy", "repeatcount", "repeatdur", "restart", "result", "rotate", "scale", "seed", "shape-rendering", "slope", "specularconstant", "specularexponent", "spreadmethod", "startoffset", "stddeviation", "stitchtiles", "stop-color", "stop-opacity", "stroke-dasharray", "stroke-dashoffset", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "stroke-opacity", "stroke", "stroke-width", "style", "surfacescale", "systemlanguage", "tabindex", "tablevalues", "targetx", "targety", "transform", "transform-origin", "text-anchor", "text-decoration", "text-rendering", "textlength", "type", "u1", "u2", "unicode", "values", "viewbox", "visibility", "version", "vert-adv-y", "vert-origin-x", "vert-origin-y", "width", "word-spacing", "wrap", "writing-mode", "xchannelselector", "ychannelselector", "x", "x1", "x2", "xmlns", "y", "y1", "y2", "z", "zoomandpan"]);
+var mathMl = freeze2(["accent", "accentunder", "align", "bevelled", "close", "columnsalign", "columnlines", "columnspan", "denomalign", "depth", "dir", "display", "displaystyle", "encoding", "fence", "frame", "height", "href", "id", "largeop", "length", "linethickness", "lspace", "lquote", "mathbackground", "mathcolor", "mathsize", "mathvariant", "maxsize", "minsize", "movablelimits", "notation", "numalign", "open", "rowalign", "rowlines", "rowspacing", "rowspan", "rspace", "rquote", "scriptlevel", "scriptminsize", "scriptsizemultiplier", "selection", "separator", "separators", "stretchy", "subscriptshift", "supscriptshift", "symmetric", "voffset", "width", "xmlns"]);
+var xml = freeze2(["xlink:href", "xml:id", "xlink:title", "xml:space", "xmlns:xlink"]);
 var MUSTACHE_EXPR = seal(/\{\{[\w\W]*|[\w\W]*\}\}/gm);
 var ERB_EXPR = seal(/<%[\w\W]*|[\w\W]*%>/gm);
 var TMPLIT_EXPR = seal(/\$\{[\w\W]*/gm);
@@ -1728,8 +2156,8 @@ function createDOMPurify() {
         emptyHTML = trustedTypesPolicy.createHTML("");
       }
     }
-    if (freeze) {
-      freeze(cfg);
+    if (freeze2) {
+      freeze2(cfg);
     }
     CONFIG = cfg;
   };
@@ -2223,408 +2651,369 @@ function createDOMPurify() {
 }
 var purify = createDOMPurify();
 
-// src/model.js
-var copy = (value) => structuredClone(value);
-var compare = (a, b2) => a.start - b2.start || a.end - b2.end || (a.id < b2.id ? -1 : a.id > b2.id ? 1 : 0);
-var requiredString = (value) => typeof value === "string" && value.trim().length > 0;
-function validateOptions({ document: document2, labels }) {
-  if (!document2 || !requiredString(document2.id) || !requiredString(document2.version)) throw new Error("Document ID and immutable version are required.");
-  if (!Array.isArray(labels) || labels.length !== 2 || labels.some((l) => !l || !requiredString(l.id) || !requiredString(l.name))) throw new Error("Exactly two labels with IDs and names are required.");
-  if (new Set(labels.map((l) => l.id)).size !== 2 || new Set(labels.map((l) => l.direction)).size !== 2 || labels.some((l) => !["left", "right"].includes(l.direction))) throw new Error("Labels need distinct IDs and one left/right assignment each.");
-}
-var ReviewSession = class {
-  #annotations = [];
-  #pending = null;
-  #activeId = null;
-  #undo = [];
-  #redo = [];
-  #document;
-  #labels;
-  #emit;
-  #revision = 0;
-  constructor({ document: document2, labels, text: text2 }, onEvent = () => {
-  }) {
-    validateOptions({ document: document2, labels });
-    if (typeof text2 !== "string") throw new Error("Canonical text must be a string.");
-    this.#document = { id: document2.id, version: document2.version, text: text2, canonicalFormat: "review-text-v1", offsetUnit: "utf-16", endExclusive: true };
-    this.#labels = labels.map(({ id, name, direction }) => ({ id, name, direction }));
-    this.#emit = (name, detail) => onEvent(name, copy(detail));
-  }
-  get pending() {
-    return copy(this.#pending);
-  }
-  get activeId() {
-    return this.#activeId;
-  }
-  get text() {
-    return this.#document.text;
-  }
-  get labels() {
-    return copy(this.#labels);
-  }
-  get revision() {
-    return this.#revision;
-  }
-  read() {
-    return copy([...this.#annotations].sort(compare));
-  }
-  anchor(start, end) {
-    const text2 = this.text;
-    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > text2.length || start >= end) throw new Error("Selection needs a nonempty in-document integer range.");
-    return { start, end, quote: text2.slice(start, end), prefix: text2.slice(Math.max(0, start - 32), start), suffix: text2.slice(end, end + 32) };
-  }
-  select(start, end) {
-    const pending = this.anchor(start, end);
-    this.#pending = pending;
-    this.#activeId = null;
-    this.#emit("selection", pending);
-    return copy(pending);
-  }
-  clear() {
-    this.#pending = null;
-    this.#activeId = null;
-    this.#emit("selection", null);
-  }
-  activate(id) {
-    if (!this.#annotations.some((a) => a.id === id)) throw new Error("Unknown annotation ID.");
-    this.#pending = null;
-    this.#activeId = id;
-    this.#emit("selection", { annotationId: id });
-  }
-  #commit(next) {
-    const previous = this.#annotations;
-    this.#undo.push(copy(previous));
-    this.#redo = [];
-    this.#annotations = next;
-    this.#revision++;
-    this.#changes(previous, next);
-  }
-  #changes(previous, next) {
-    for (const a of previous) if (!next.some((b2) => b2.id === a.id)) this.#emit("delete", a);
-    for (const a of next) {
-      const old = previous.find((b2) => b2.id === a.id);
-      if (!old) this.#emit("create", a);
-      else if (old.labelId !== a.labelId) this.#emit("update", a);
-    }
-  }
-  classify(labelId) {
-    if (!this.#labels.some((l) => l.id === labelId)) throw new Error("Unknown label ID.");
-    if (this.#pending) {
-      const annotation = { id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...this.#pending };
-      this.#pending = null;
-      this.#activeId = null;
-      this.#commit([...this.#annotations, annotation]);
-      this.clear();
-      return copy(annotation);
-    }
-    if (this.#activeId) return this.relabel(this.#activeId, labelId);
-    return null;
-  }
-  relabel(id, labelId) {
-    const target = this.#annotations.find((a) => a.id === id);
-    if (!target) throw new Error("Unknown annotation ID.");
-    if (!this.#labels.some((l) => l.id === labelId)) throw new Error("Unknown label ID.");
-    if (target.labelId === labelId) return copy(target);
-    this.#commit(this.#annotations.map((a) => a.id === id ? { ...a, labelId } : a));
-    return copy(this.#annotations.find((a) => a.id === id));
-  }
-  delete(id) {
-    if (!this.#annotations.some((a) => a.id === id)) throw new Error("Unknown annotation ID.");
-    this.#commit(this.#annotations.filter((a) => a.id !== id));
-    if (this.#activeId === id) this.clear();
-  }
-  #travel(from, to) {
-    this.clear();
-    if (!from.length) return false;
-    const previous = this.#annotations;
-    to.push(copy(previous));
-    this.#annotations = from.pop();
-    this.#revision++;
-    this.#changes(previous, this.#annotations);
-    return true;
-  }
-  undo() {
-    return this.#travel(this.#undo, this.#redo);
-  }
-  redo() {
-    return this.#travel(this.#redo, this.#undo);
-  }
-  export(format = "grouped") {
-    if (!["grouped", "split"].includes(format)) throw new Error("Export format must be grouped or split.");
-    const base = { schemaVersion: 1, document: copy(this.#document), labels: this.labels };
-    const selections = Object.fromEntries(this.#labels.map((l) => [l.id, this.read().filter((a) => a.labelId === l.id)]));
-    if (format === "split") return this.#labels.map((l) => ({ ...copy(base), selections: { [l.id]: selections[l.id] } }));
-    return { ...base, selections };
-  }
-  restore(input) {
-    const payloads = Array.isArray(input) ? input : [input];
-    if (payloads.length !== (Array.isArray(input) ? 2 : 1)) throw new Error("Restore needs a grouped payload or both split payloads.");
-    const annotations = [], groups = /* @__PURE__ */ new Set(), ids = /* @__PURE__ */ new Set();
-    for (const payload of payloads) {
-      if (!payload || payload.schemaVersion !== 1 || !payload.document || Object.entries(this.#document).some(([key, value]) => payload.document[key] !== value)) throw new Error("Restore document identity, version, canonical text, or format does not match.");
-      if (!Array.isArray(payload.labels) || payload.labels.length !== 2 || new Set(payload.labels.map((l) => l?.id)).size !== 2 || this.#labels.some((label) => !payload.labels.some((candidate) => candidate && ["id", "name", "direction"].every((key) => candidate[key] === label[key])))) throw new Error("Restore labels do not match this session.");
-      if (!payload.selections || typeof payload.selections !== "object" || Array.isArray(payload.selections)) throw new Error("Restore selections must be grouped by label ID.");
-      if (Array.isArray(input) && Object.keys(payload.selections).length !== 1) throw new Error("Each split payload must contain one label group.");
-      for (const [labelId, values] of Object.entries(payload.selections)) {
-        if (!this.#labels.some((l) => l.id === labelId) || groups.has(labelId) || !Array.isArray(values)) throw new Error("Invalid or duplicate restore label group.");
-        groups.add(labelId);
-        for (const a of values) {
-          if (!a || !requiredString(a.id) || ids.has(a.id) || a.labelId !== labelId || a.documentId !== this.#document.id || a.documentVersion !== this.#document.version) throw new Error("Invalid annotation identity, label, or duplicate ID.");
-          const anchor = this.anchor(a.start, a.end);
-          for (const field of ["quote", "prefix", "suffix"]) if (a[field] !== anchor[field]) throw new Error(`Annotation ${a.id}: ${field} does not match its positions.`);
-          ids.add(a.id);
-          annotations.push({ id: a.id, documentId: a.documentId, documentVersion: a.documentVersion, labelId, ...anchor });
-        }
-      }
-    }
-    if (groups.size !== 2) throw new Error("Restore must include both label groups, including empty groups.");
-    this.#annotations = annotations.sort(compare);
-    this.#revision++;
-    this.#undo = [];
-    this.#redo = [];
-    this.clear();
-  }
-};
-
-// src/text.js
-var BLOCKS = /* @__PURE__ */ new Set(["P", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "BLOCKQUOTE", "PRE"]);
-function canonicalText(root) {
-  const segments = [];
-  let text2 = "";
-  const append = (value, node, kind = "text") => {
-    if (!value) return;
-    segments.push({ node, kind, start: text2.length, end: text2.length + value.length });
-    text2 += value;
-  };
-  function walk(node) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const betweenBlocks = /^\s*$/.test(node.data) && [...node.parentElement.children].some((c) => BLOCKS.has(c.tagName) || ["UL", "OL"].includes(c.tagName));
-      if (!betweenBlocks) append(node.data, node);
-      return;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    if (node.tagName === "BR") {
-      append("\n", node, "br");
-      return;
-    }
-    for (const child of node.childNodes) walk(child);
-    if (BLOCKS.has(node.tagName) && segments.at(-1)?.kind !== "separator") append("\n", node, "separator");
-  }
-  for (const node of root.childNodes) walk(node);
-  while (segments.at(-1)?.kind === "separator") text2 = text2.slice(0, segments.pop().start);
-  function boundary(segment, end) {
-    if (segment.kind === "text") return [segment.node, end ? segment.node.data.length : 0];
-    const parent = segment.node.parentNode;
-    const index = [...parent.childNodes].indexOf(segment.node);
-    return [parent, index + (segment.kind === "separator" || end ? 1 : 0)];
-  }
-  function offset(node, position) {
-    if (node !== root && !root.contains(node)) throw new Error("Selection is outside the document.");
-    const direct = segments.find((s) => s.node === node && s.kind === "text");
-    if (direct) return direct.start + Math.min(position, node.data.length);
-    const point2 = document.createRange();
-    point2.setStart(node, position);
-    point2.collapse(true);
-    let result = 0;
-    for (const s of segments) {
-      const edge = document.createRange();
-      edge.setStart(...boundary(s, true));
-      edge.collapse(true);
-      if (edge.compareBoundaryPoints(Range.START_TO_START, point2) <= 0) result = s.end;
-      else break;
-    }
-    return result;
-  }
-  function point(position, end) {
-    if (position < 0 || position > text2.length) throw new Error("Text position is outside the document.");
-    const s = segments.find((s2) => s2.kind === "text" && (end ? position > s2.start && position <= s2.end : position >= s2.start && position < s2.end));
-    if (s) return [s.node, position - s.start];
-    const next = segments.find((s2) => s2.start >= position && s2.kind === "text");
-    if (!end && next) return [next.node, 0];
-    const previous = segments.filter((s2) => s2.end <= position && s2.kind === "text").at(-1);
-    if (previous) return [previous.node, previous.node.data.length];
-    return next ? [next.node, 0] : [root, 0];
-  }
-  return {
-    text: text2,
-    offset,
-    range(start, end) {
-      const range = document.createRange();
-      range.setStart(...point(start, false));
-      range.setEnd(...point(end, true));
-      return range;
-    },
-    fromRange(range) {
-      return { start: offset(range.startContainer, range.startOffset), end: offset(range.endContainer, range.endOffset) };
-    }
-  };
-}
-
-// src/gesture.js
-function swipeDirection(dx, dy) {
-  if (Math.abs(dx) >= 60 && Math.abs(dx) >= 1.5 * Math.abs(dy)) return dx < 0 ? "left" : "right";
-  return null;
-}
-
-// src/styles.js
-var tokens = {
-  background: ["--review-panel", "background-color", "light-dark(#fffefa, #1c201f)"],
-  surfaceBackground: ["--review-subtle", "background-color", "light-dark(#f1f4ef, #282f2b)"],
-  toolbarBackground: ["--review-toolbar-bg", "background-color", "light-dark(#f8f9f5, #202623)"],
-  textColor: ["--review-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  mutedColor: ["--review-muted", "color", "light-dark(#626e68, #a5b3ac)"],
-  borderColor: ["--review-border", "border-color", "light-dark(#dce2dc, #3b4640)"],
-  focusColor: ["--review-focus", "color", "light-dark(#315da5, #98baff)"],
-  linkColor: ["--review-link", "color", "light-dark(#226453, #a0d7bd)"],
-  codeBackground: ["--review-code", "background-color", "light-dark(#f1f4ef, #282f2b)"],
-  buttonBackground: ["--review-button-bg", "background-color", "transparent"],
-  buttonTextColor: ["--review-button-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  buttonHoverBackground: ["--review-button-hover", "background-color", "light-dark(#f1f4ef, #282f2b)"],
-  buttonBorderColor: ["--review-button-border", "border-color", "transparent"],
-  primaryBackground: ["--review-primary", "background-color", "light-dark(#263f35, #c8dfd0)"],
-  primaryHoverBackground: ["--review-primary-hover", "background-color", "light-dark(#263f35, #c8dfd0)"],
-  primaryTextColor: ["--review-on-primary", "color", "light-dark(#fffefa, #192c22)"],
-  leftBackground: ["--review-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
-  leftTextColor: ["--review-left-text", "color", "light-dark(#226453, #a0d7bd)"],
-  leftBorderColor: ["--review-left-border", "border-color", "transparent"],
-  rightBackground: ["--review-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
-  rightTextColor: ["--review-right-text", "color", "light-dark(#885634, #e7ba92)"],
-  rightBorderColor: ["--review-right-border", "border-color", "transparent"],
-  activeBackground: ["--review-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
-  activeTextColor: ["--review-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  activeBorderColor: ["--review-active-border", "border-color", "light-dark(#74826f, #a5b3ac)"],
-  highlightLeftBackground: ["--review-mark-left-bg", "background-color", "light-dark(#e8f2ec, #2c4439)"],
-  highlightLeftTextColor: ["--review-mark-left-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  highlightLeftBorderColor: ["--review-mark-left-border", "color", "light-dark(#226453, #a0d7bd)"],
-  highlightRightBackground: ["--review-mark-right-bg", "background-color", "light-dark(#f9efe4, #45372c)"],
-  highlightRightTextColor: ["--review-mark-right-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  highlightRightBorderColor: ["--review-mark-right-border", "color", "light-dark(#885634, #e7ba92)"],
-  highlightPendingBackground: ["--review-mark-pending-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
-  highlightPendingTextColor: ["--review-mark-pending-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  highlightActiveBackground: ["--review-mark-active-bg", "background-color", "light-dark(#e7ece6, #35423a)"],
-  highlightActiveTextColor: ["--review-mark-active-text", "color", "light-dark(#252e2b, #e9eeeb)"],
-  backdropColor: ["--review-backdrop", "color", "light-dark(#15271d55, #00000099)"],
-  shadowColor: ["--review-shadow", "color", "light-dark(#1c302012, #00000033)"],
-  boxShadow: ["--review-box-shadow", "box-shadow", "0 8px 28px light-dark(#1c302012, #00000033)"],
-  fontFamily: ["--review-font-family", "font-family", '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'],
-  fontSize: ["--review-font-size", "font-size", "14px"],
-  lineHeight: ["--review-line-height", "line-height", "1.65"],
-  documentFontFamily: ["--review-document-font", "font-family", '"Iowan Old Style", "Palatino Linotype", Georgia, serif'],
-  documentFontSize: ["--review-document-size", "font-size", "16px"],
-  documentLineHeight: ["--review-document-line-height", "line-height", "1.85"],
-  headingFontFamily: ["--review-heading-font", "font-family", "system-ui, sans-serif"],
-  headingFontSize: ["--review-heading-size", "font-size", "27px"],
-  headingLineHeight: ["--review-heading-line-height", "line-height", "1.3"],
-  headingLetterSpacing: ["--review-heading-spacing", "letter-spacing", "-.025em"],
-  codeFontFamily: ["--review-code-font", "font-family", "ui-monospace, SFMono-Regular, monospace"],
-  codeFontSize: ["--review-code-size", "font-size", "12px"],
-  codeLineHeight: ["--review-code-line-height", "line-height", "1.8"],
-  smallFontSize: ["--review-small-size", "font-size", "12px"],
-  buttonFontSize: ["--review-button-size", "font-size", "12px"],
-  borderWidth: ["--review-border-width", "border-top-width", "1px"],
-  borderRadius: ["--review-radius", "border-radius", "12px"],
-  buttonBorderWidth: ["--review-button-border-width", "border-top-width", "1px"],
-  buttonRadius: ["--review-button-radius", "border-radius", "6px"],
-  codeRadius: ["--review-code-radius", "border-radius", "7px"],
-  dialogRadius: ["--review-dialog-radius", "border-radius", "12px"],
-  focusWidth: ["--review-focus-width", "outline-width", "3px"],
-  focusOffset: ["--review-focus-offset", "outline-offset", "3px"],
-  documentPadding: ["--review-document-padding", "padding", "36px 38px 26px"],
-  narrowDocumentPadding: ["--review-narrow-document-padding", "padding", "28px 22px 24px"],
-  toolbarPadding: ["--review-toolbar-padding", "padding", "9px 18px"],
-  toolbarGap: ["--review-toolbar-gap", "gap", "8px"],
-  buttonPadding: ["--review-button-padding", "padding", "7px 9px"],
-  paragraphSpacing: ["--review-paragraph-spacing", "margin-bottom", "24px"],
-  codePadding: ["--review-code-padding", "padding", "16px 18px"],
-  dialogPadding: ["--review-dialog-padding", "padding", "22px"],
-  sidebarPadding: ["--review-sidebar-padding", "padding", "16px"],
-  statusPadding: ["--review-status-padding", "padding", "12px 18px"],
-  colorScheme: ["color-scheme", "color-scheme", "inherit"]
-};
-var defaultReviewStyles = Object.freeze(Object.fromEntries(Object.entries(tokens).map(([name, [, , value]]) => [name, value])));
-function resolveReviewStyles(overrides = {}) {
-  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides) || ![Object.prototype, null].includes(Object.getPrototypeOf(overrides))) throw new Error("Styles must be a map of named CSS values.");
-  for (const [name, value] of Object.entries(overrides)) {
-    if (!Object.hasOwn(tokens, name)) throw new Error(`Unknown style: ${name}`);
-    if (typeof value !== "string" || !value.trim()) throw new Error(`Style ${name} must be a nonempty CSS string.`);
-    if (name === "colorScheme" && !["inherit", "light", "dark"].includes(value.trim())) throw new Error("Style colorScheme must be inherit, light or dark.");
-    if (name !== "colorScheme" && /^(inherit|initial|unset|revert|revert-layer)$/i.test(value.trim())) throw new Error(`Style ${name} cannot use a CSS reset keyword.`);
-  }
-  return { ...defaultReviewStyles, ...overrides };
-}
-function applyReviewStyles(root, overrides) {
-  const styles = resolveReviewStyles(overrides);
-  for (const [name, value] of Object.entries(styles)) if (!CSS.supports(tokens[name][1], value)) throw new Error(`Invalid CSS value for style ${name}: ${value}`);
-  for (const [name, value] of Object.entries(styles)) root.style.setProperty(tokens[name][0], value);
-}
-
-// src/review.js
-var DEFAULT_SHORTCUTS = {
-  nextBlock: ["Alt+ArrowDown"],
-  previousBlock: ["Alt+ArrowUp"],
-  selectBlock: ["Enter"],
-  precise: ["F2"],
-  left: ["Alt+ArrowLeft"],
-  right: ["Alt+ArrowRight"],
-  clear: ["Escape"],
-  remove: ["Delete", "Backspace"],
-  nextAnnotation: ["Alt+N"],
-  previousAnnotation: ["Alt+P"],
-  undo: ["Mod+Z"],
-  redo: ["Mod+Shift+Z", "Ctrl+Y"],
-  export: ["Mod+Shift+E"],
-  finish: ["Mod+Enter"],
-  help: ["F1"]
-};
+// src/render.js
 var TAGS = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "em", "strong", "a", "ul", "ol", "li", "blockquote", "pre", "code", "br", "hr", "del"];
 var BLOCK_SELECTOR = "p,h1,h2,h3,h4,h5,h6,li,pre";
-function selectableBlock(target) {
-  return target.closest("li,pre") ?? target.closest(BLOCK_SELECTOR);
-}
 function element(tag, className, text2) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text2 !== void 0) node.textContent = text2;
   return node;
 }
-function shortcutMap(overrides = {}) {
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const defaults = structuredClone(DEFAULT_SHORTCUTS);
-  if (mac) defaults.redo = ["Mod+Shift+Z"];
-  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) throw new Error("Shortcut overrides must be a command map.");
-  for (const [command, value] of Object.entries(overrides)) {
-    if (!Object.hasOwn(defaults, command)) throw new Error(`Unknown shortcut command: ${command}`);
-    const keys = typeof value === "string" ? [value] : value;
-    if (!Array.isArray(keys) || !keys.length || keys.some((k2) => typeof k2 !== "string" || !k2.trim())) throw new Error(`Invalid shortcut for ${command}.`);
-    defaults[command] = [...keys];
-  }
-  const normalize = (value) => {
-    const parts = value.toLowerCase().replaceAll("mod", mac ? "meta" : "ctrl").split("+");
-    const key = parts.pop();
-    if (!key || parts.some((p) => !["ctrl", "alt", "shift", "meta"].includes(p)) || new Set(parts).size !== parts.length) throw new Error(`Invalid shortcut: ${value}`);
-    return [...parts.sort(), key].join("+");
-  };
-  const bindings = /* @__PURE__ */ new Map();
-  for (const [command, values] of Object.entries(defaults)) for (const value of values) {
-    const key = normalize(value);
-    if (bindings.has(key)) throw new Error(`Shortcut conflict: ${value}`);
-    bindings.set(key, command);
-  }
-  const display = Object.fromEntries(Object.entries(defaults).map(([name, keys]) => [name, keys.map((key) => key.replace(/\bmod\b/gi, mac ? "Cmd" : "Ctrl").replace(/\bmeta\b/gi, mac ? "Cmd" : "Meta"))]));
-  return { effective: defaults, display, command(event) {
-    const modifiers = [];
-    if (event.ctrlKey) modifiers.push("ctrl");
-    if (event.altKey) modifiers.push("alt");
-    if (event.shiftKey) modifiers.push("shift");
-    if (event.metaKey) modifiers.push("meta");
-    return bindings.get([...modifiers.sort(), event.key.toLowerCase()].join("+"));
-  } };
+function selectableBlock(target) {
+  return target.closest("li,pre") ?? target.closest(BLOCK_SELECTOR);
 }
-function mountReview(container, options) {
+function renderMarkdown(surface, markdown) {
+  const html2 = g.parse(markdown, { gfm: false });
+  surface.innerHTML = purify.sanitize(html2, { ALLOWED_TAGS: TAGS, ALLOWED_ATTR: ["href", "title", "start"], ALLOW_DATA_ATTR: false });
+  const blocks = [...surface.querySelectorAll(BLOCK_SELECTOR)].filter((block) => selectableBlock(block) === block);
+  for (const block of blocks) {
+    block.tabIndex = -1;
+  }
+  return blocks;
+}
+function highlightNames(token) {
+  return {
+    left: `${token}-left`,
+    right: `${token}-right`,
+    pending: `${token}-pending`,
+    active: `${token}-active`
+  };
+}
+function highlightStyle(names) {
+  return [
+    `::highlight(${names.left}) { background: var(--review-mark-left-bg); color: var(--review-mark-left-text); text-decoration: underline solid var(--review-mark-left-border) 2px; }`,
+    `::highlight(${names.right}) { background: var(--review-mark-right-bg); color: var(--review-mark-right-text); text-decoration: underline solid var(--review-mark-right-border) 2px; }`,
+    `::highlight(${names.pending}) { background: var(--review-mark-pending-bg); color: var(--review-mark-pending-text); text-decoration: underline solid var(--review-mark-pending-text) 1px; }`,
+    `::highlight(${names.active}) { background: var(--review-mark-active-bg); color: var(--review-mark-active-text); text-decoration: underline; }`
+  ].join(" ");
+}
+function paintHighlights({ names, text: text2, labels, annotations, pending, active }) {
+  for (const direction of ["left", "right"]) {
+    const label = labels.find((l) => l.direction === direction);
+    const ranges = annotations.filter((a) => a.labelId === label.id).map((a) => text2.range(a.start, a.end));
+    CSS.highlights.set(names[direction], new Highlight(...ranges));
+  }
+  const pendingRanges = pending ? [text2.range(pending.start, pending.end)] : [];
+  CSS.highlights.set(names.pending, new Highlight(...pendingRanges));
+  const activeRanges = active ? [text2.range(active.start, active.end)] : [];
+  CSS.highlights.set(names.active, new Highlight(...activeRanges));
+}
+var ICONS = {
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  keyboard: '<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>'
+};
+function icon(name) {
+  const holder = document.createElement("span");
+  holder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`;
+  return holder.firstChild;
+}
+var WHISPER_GAP_ABOVE = 14;
+var WHISPER_GAP_BELOW = 26;
+var reservedBlocks = /* @__PURE__ */ new WeakMap();
+function placeWhisper(whisper, layout, block) {
+  const previous = reservedBlocks.get(whisper);
+  if (previous && previous !== block) previous.style.marginBottom = "";
+  if (!block) {
+    reservedBlocks.delete(whisper);
+    return;
+  }
+  reservedBlocks.set(whisper, block);
+  const origin = layout.getBoundingClientRect();
+  const rect = block.getBoundingClientRect();
+  whisper.style.left = `${rect.left - origin.left}px`;
+  whisper.style.width = `${rect.width}px`;
+  whisper.style.top = `${rect.bottom - origin.top + WHISPER_GAP_ABOVE}px`;
+  block.style.marginBottom = `${WHISPER_GAP_ABOVE + whisper.offsetHeight + WHISPER_GAP_BELOW}px`;
+}
+function repositionWhisper(whisper, layout) {
+  const block = reservedBlocks.get(whisper);
+  if (block && !whisper.hidden) placeWhisper(whisper, layout, block);
+}
+function paintWhisper({ whisper, layout, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded, held }) {
+  const assigned = annotations.find((a) => a.id === assignedId);
+  let state = null;
+  let target = null;
+  if (precise) {
+    state = "precise";
+    target = pending;
+  } else if (pending) {
+    state = "pending";
+    target = pending;
+  } else if (active) {
+    state = "active";
+    target = active;
+  } else if (assigned) {
+    state = "assigned";
+    target = assigned;
+  }
+  whisper.hidden = state === null;
+  if (!state) {
+    placeWhisper(whisper, layout, null);
+    return;
+  }
+  const checked = state === "active" || state === "assigned" ? labels.find((l) => l.id === target.labelId) : null;
+  whisper.dataset.state = state;
+  whisper.dataset.assigned = checked?.direction ?? "";
+  for (const label of labels) {
+    const node = whisper.querySelector(`[data-end="${label.direction}"]`);
+    const name = checked === label ? `\u2713 ${label.name}` : label.name;
+    node.dataset.text = label.direction === "left" ? `\u2190 ${name}` : `${name} \u2192`;
+    node.classList.toggle("review-whisper-checked", checked === label);
+  }
+  const status = whisper.querySelector(".review-whisper-status");
+  const hint = whisper.querySelector(".review-whisper-hint");
+  if (state === "precise") {
+    status.dataset.text = "Selecting text";
+    hint.dataset.text = "";
+  } else if (state === "pending") {
+    status.dataset.text = "Unlabeled";
+    hint.dataset.text = expanded ? " \xB7 choose above" : " \xB7 scroll \u2190 \u2192 over selection";
+  } else if (state === "active") {
+    status.dataset.text = `\u2713 ${checked.name}`;
+    hint.dataset.text = " \xB7 \u2022\u2022\u2022 to edit";
+  } else {
+    status.dataset.text = `\u2713 ${checked.name} \xB7 ${undoKeys} undo`;
+    hint.dataset.text = "";
+  }
+  let anchor = focusedBlock;
+  if (state !== "precise") {
+    const end = text2.range(target.start, target.end).endContainer;
+    anchor = end.nodeType === Node.TEXT_NODE ? end.parentElement : end;
+  }
+  if (held && reservedBlocks.has(whisper)) {
+    placeWhisper(whisper, layout, reservedBlocks.get(whisper));
+    return;
+  }
+  const block = anchor ? selectableBlock(anchor) : null;
+  placeWhisper(whisper, layout, block && surface.contains(block) ? block : null);
+}
+function renderSavedList({ list, count, labels, annotations, activeId }) {
+  count.textContent = `Annotations (${annotations.length})`;
+  list.replaceChildren();
+  for (const annotation of annotations) {
+    const label = labels.find((l) => l.id === annotation.labelId);
+    const button = element("button", "review-saved-item", `${label.name}: ${annotation.quote}`);
+    button.type = "button";
+    button.dataset.annotationId = annotation.id;
+    button.setAttribute("aria-pressed", String(activeId === annotation.id));
+    const item = element("li");
+    item.append(button);
+    list.append(item);
+  }
+}
+
+// src/dialogs.js
+function moveFocusWithArrows(modal, event) {
+  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+  const buttons = [...modal.querySelectorAll("button")];
+  const index = buttons.indexOf(document.activeElement);
+  const step = event.key === "ArrowDown" ? 1 : -1;
+  buttons[(index + step + buttons.length) % buttons.length].focus();
+  event.preventDefault();
+}
+function createDialogs(root, idPrefix, isDestroyed) {
+  let current = null;
+  function open(title, content, dismissLabel = "Cancel") {
+    if (current) return null;
+    const previousFocus = document.activeElement;
+    const modal = element("dialog", "review-dialog");
+    const heading = element("h2", "", title);
+    heading.id = `${idPrefix}-dialog-title`;
+    modal.setAttribute("aria-labelledby", heading.id);
+    modal.append(heading, content);
+    const dismiss = element("button", "", dismissLabel);
+    dismiss.type = "button";
+    dismiss.addEventListener("click", () => modal.close("cancel"));
+    modal.append(dismiss);
+    root.append(modal);
+    current = modal;
+    modal.addEventListener("close", () => {
+      current = null;
+      modal.remove();
+      if (!isDestroyed() && previousFocus?.isConnected) previousFocus.focus();
+    }, { once: true });
+    modal.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      modal.close("cancel");
+    });
+    modal.addEventListener("keydown", (event) => moveFocusWithArrows(modal, event));
+    modal.showModal();
+    modal.querySelector("button")?.focus();
+    return modal;
+  }
+  return {
+    open,
+    close(value) {
+      current?.close(value);
+    },
+    get isOpen() {
+      return current !== null;
+    }
+  };
+}
+function choiceList(choices) {
+  const content = element("div", "review-choices");
+  for (const { title, onChoose } of choices) {
+    const button = element("button", "", title);
+    button.type = "button";
+    button.addEventListener("click", onChoose);
+    content.append(button);
+  }
+  return content;
+}
+var KEY_NAMES = { arrowleft: "\u2190", arrowright: "\u2192", arrowup: "\u2191", arrowdown: "\u2193", escape: "Esc" };
+function keycaps(chord) {
+  const caps = element("span", "review-key-chord");
+  chord.split("+").forEach((part, index) => {
+    if (index > 0) caps.append("+");
+    caps.append(element("kbd", "", KEY_NAMES[part.toLowerCase()] ?? part));
+  });
+  return caps;
+}
+function keyRow(label, chords) {
+  const combo = element("span", "review-key-combo");
+  chords.forEach((chord, index) => {
+    if (index > 0) combo.append(" / ");
+    combo.append(keycaps(chord));
+  });
+  const row = element("div", "review-key-row");
+  row.append(element("span", "", label), combo);
+  return row;
+}
+function shortcutHelp({ display, mac, left, right }) {
+  const content = element("div", "review-keys");
+  content.append(
+    keyRow(`Label ${left.name}`, display.left),
+    keyRow(`Label ${right.name}`, display.right),
+    keyRow("Clear selection / close", display.clear),
+    keyRow("Delete annotation", display.remove),
+    keyRow("Undo", display.undo),
+    keyRow("Redo", display.redo),
+    keyRow("Export files", display.export),
+    keyRow("Done", display.finish)
+  );
+  const details = element("details");
+  details.append(
+    element("summary", "", "Selection & navigation"),
+    keyRow("Next block", display.nextBlock),
+    keyRow("Previous block", display.previousBlock),
+    keyRow("Select focused block", display.selectBlock),
+    keyRow("Precise selection", display.precise),
+    keyRow("Extend exact selection (precise mode)", ["Shift+ArrowLeft", "Shift+ArrowRight"]),
+    // Native word steps: Alt on macOS, Ctrl elsewhere (matches movePreciseCaret).
+    keyRow("Extend selection by word", [mac ? "Alt+Shift+ArrowLeft" : "Ctrl+Shift+ArrowLeft", mac ? "Alt+Shift+ArrowRight" : "Ctrl+Shift+ArrowRight"]),
+    keyRow("Next annotation", display.nextAnnotation),
+    keyRow("Previous annotation", display.previousAnnotation),
+    keyRow("Choose overlapping annotation", ["ArrowUp", "ArrowDown", "Enter"]),
+    keyRow("Move between controls", ["Tab", "Shift+Tab"]),
+    keyRow("Show this help", display.help)
+  );
+  content.append(
+    details,
+    element("p", "review-keys-note", "Scroll left or right over selected text to label it. Escape closes this popup first; your selection stays. Undo reverses the latest annotation change and clears pending text.")
+  );
+  return content;
+}
+
+// src/pointer.js
+function installPointerInput(ctx) {
+  const { surface, text: text2, state, left, right, dialogs, listen, safe } = ctx;
+  let press = null;
+  function pointAt(x2, y2) {
+    const point = document.caretPositionFromPoint?.(x2, y2);
+    if (point && surface.contains(point.offsetNode)) return text2.offset(point.offsetNode, point.offset);
+    const range = document.caretRangeFromPoint?.(x2, y2);
+    if (range && surface.contains(range.startContainer)) return text2.offset(range.startContainer, range.startOffset);
+    return null;
+  }
+  function hitRange(anchor, x2, y2) {
+    const rectangles = [...text2.range(anchor.start, anchor.end).getClientRects()];
+    return rectangles.some((r) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom);
+  }
+  listen(surface, "pointerdown", (event) => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target };
+  });
+  listen(surface, "pointerup", (event) => safe(() => {
+    if (!press || press.id !== event.pointerId) return;
+    const current = press;
+    press = null;
+    const dx = event.clientX - current.x;
+    const dy = event.clientY - current.y;
+    if (ctx.nativeRange() || Math.hypot(dx, dy) > 4) {
+      ctx.syncSelection();
+      return;
+    }
+    const at = pointAt(event.clientX, event.clientY);
+    const saved = at === null ? [] : state.read().filter((a) => at >= a.start && at < a.end && hitRange(a, event.clientX, event.clientY));
+    ctx.resetNative();
+    ctx.exitPrecise();
+    if (saved.length > 1) {
+      ctx.chooseOverlap(saved);
+      return;
+    }
+    if (saved.length === 1) {
+      ctx.activate(saved[0].id);
+      return;
+    }
+    const block = selectableBlock(current.target);
+    if (block && surface.contains(block)) {
+      block.focus({ preventScroll: true });
+      ctx.selectBlock();
+      return;
+    }
+    state.clear();
+  }));
+  listen(surface, "pointercancel", () => {
+    press = null;
+  });
+  listen(document, "pointerup", (event) => {
+    if (!press || surface.contains(event.target)) return;
+    press = null;
+    ctx.syncSelection();
+  });
+  listen(surface, "wheel", (event) => safe(() => {
+    if (event.deltaX === 0 || event.deltaY !== 0) return;
+    if (event.ctrlKey || event.metaKey) return;
+    if (dialogs.isOpen) return;
+    ctx.syncSelection();
+    const pending = state.pending;
+    if (!pending) return;
+    if (!hitRange(pending, event.clientX, event.clientY)) return;
+    ctx.classify(event.deltaX < 0 ? left : right);
+  }), { passive: true });
+}
+
+// src/review.js
+var ACTIONS = [
+  ["left", null],
+  ["right", null],
+  ["clear", "Clear selection"],
+  ["remove", "Delete annotation"],
+  ["undo", "Undo"],
+  ["redo", "Redo"],
+  ["previousBlock", "Previous block"],
+  ["nextBlock", "Next block"],
+  ["selectBlock", "Select block"],
+  ["precise", "Precise selection"],
+  ["previousAnnotation", "Previous annotation"],
+  ["nextAnnotation", "Next annotation"],
+  ["export", "Export files"]
+];
+var ARROW_KEYS = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+var PRECISE_MODE = "Precise selection: arrows move, Shift+arrows select, F2 keeps the range, Escape cancels.";
+function checkMountInput(container, options) {
   if (!(container instanceof HTMLElement)) throw new Error("Mount needs an HTML container.");
   validateOptions(options);
   if (typeof options.document.markdown !== "string") throw new Error("Markdown source must be a string.");
-  if (!globalThis.CSS?.highlights || !globalThis.Highlight || !getSelection()?.modify) throw new Error("This browser needs CSS Custom Highlight and Selection.modify support. Use a current desktop browser.");
+  if (options.document.title !== void 0 && typeof options.document.title !== "string") throw new Error("Document title must be a string when given.");
+  if (!globalThis.CSS?.highlights || !globalThis.Highlight || !getSelection()?.modify) {
+    throw new Error("This browser needs CSS Custom Highlight and Selection.modify support. Use a current desktop browser.");
+  }
+}
+function mountReview(container, options) {
+  checkMountInput(container, options);
   const shortcuts = shortcutMap(options.shortcuts);
   const format = options.exportFormat ?? "grouped";
   if (!["grouped", "split"].includes(format)) throw new Error("Export format must be grouped or split.");
@@ -2632,45 +3021,74 @@ function mountReview(container, options) {
   const root = element("section", "review");
   root.setAttribute("aria-label", "Document annotator");
   applyReviewStyles(root, options.styles);
-  const toolbar = element("div", "review-toolbar");
-  toolbar.setAttribute("role", "group");
-  toolbar.setAttribute("aria-label", "Annotation controls");
+  const token = `review-${crypto.randomUUID()}`;
+  const navbar = element("header", "review-navbar");
+  const title = element("span", "review-title");
+  title.append(icon("file"), element("span", "review-title-text", options.document.title?.trim() || options.document.id));
+  const actions = element("div", "review-actions");
+  actions.id = `${token}-actions`;
+  actions.hidden = true;
+  actions.setAttribute("role", "group");
+  actions.setAttribute("aria-label", "Annotation controls");
+  const helpButton = element("button", "review-command review-help review-icon-button");
+  helpButton.append(icon("keyboard"));
+  const more = element("button", "review-more", "\u2022\u2022\u2022");
+  more.type = "button";
+  more.title = "Annotation actions";
+  more.setAttribute("aria-label", "Annotation actions");
+  more.setAttribute("aria-controls", actions.id);
+  more.setAttribute("aria-expanded", "false");
+  const done = element("button", "review-command review-finish", "Done");
+  navbar.append(title, actions, helpButton, more, done);
   const surface = element("article", "review-document");
   surface.tabIndex = 0;
   surface.setAttribute("aria-label", "Read-only document");
-  surface.innerHTML = purify.sanitize(g.parse(options.document.markdown, { gfm: false }), { ALLOWED_TAGS: TAGS, ALLOWED_ATTR: ["href", "title", "start"], ALLOW_DATA_ATTR: false });
-  const blocks = [...surface.querySelectorAll(BLOCK_SELECTOR)].filter((block) => selectableBlock(block) === block);
-  for (const block of blocks) block.tabIndex = -1;
+  const blocks = renderMarkdown(surface, options.document.markdown);
   const layout = element("div", "review-layout");
   const sidebar = element("aside", "review-saved");
   sidebar.setAttribute("aria-label", "Saved annotations");
   const list = element("ol", "review-annotation-list");
   const count = element("h2", "", "Annotations (0)");
   sidebar.append(count, list);
-  const status = element("p", "review-status", "Click a paragraph, heading, list item, or code block; or drag an exact range.");
+  const status = element("p", "review-status", "Click a paragraph, heading, list item, or code block; or drag an exact range. Then hover it and scroll left or right, or choose a label.");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  const mode = element("p", "review-mode", "Read-only \xB7 F2 for precise keyboard selection");
   layout.append(surface, sidebar);
-  root.append(toolbar, mode, layout, status);
-  const token = `review-${crypto.randomUUID()}`;
-  const names = { left: `${token}-left`, right: `${token}-right`, pending: `${token}-pending`, active: `${token}-active` };
+  root.append(navbar, layout, status);
+  const whisper = element("div", "review-whisper");
+  whisper.hidden = true;
+  const whisperState = element("span", "review-whisper-state");
+  whisperState.append(element("span", "review-whisper-status"), element("span", "review-whisper-hint"));
+  const whisperLeft = element("span", "review-whisper-end");
+  whisperLeft.dataset.end = "left";
+  const whisperRight = element("span", "review-whisper-end");
+  whisperRight.dataset.end = "right";
+  whisper.append(whisperLeft, whisperState, whisperRight);
+  layout.append(whisper);
+  const names = highlightNames(token);
   const style = element("style");
-  style.textContent = `::highlight(${names.left}) { background: var(--review-mark-left-bg); color: var(--review-mark-left-text); text-decoration: underline solid var(--review-mark-left-border) 2px; } ::highlight(${names.right}) { background: var(--review-mark-right-bg); color: var(--review-mark-right-text); text-decoration: underline solid var(--review-mark-right-border) 2px; } ::highlight(${names.pending}) { background: var(--review-mark-pending-bg); color: var(--review-mark-pending-text); text-decoration: underline solid var(--review-mark-pending-text) 1px; } ::highlight(${names.active}) { background: var(--review-mark-active-bg); color: var(--review-mark-active-text); text-decoration: underline; }`;
+  style.textContent = highlightStyle(names);
   root.append(style);
   container.replaceChildren(root);
   const text2 = canonicalText(surface);
   const listeners = new AbortController();
-  let destroyed = false, precise = false, gesture = null, dialog = null, finishPromise = null;
+  let destroyed = false;
+  let precise = false;
+  let finishPromise = null;
   let focusedBlock = null;
   let initialized = false;
+  let expanded = false;
+  let assignedId = null;
   const state = new ReviewSession({ ...options, text: text2.text }, (name, detail) => {
+    if (name === "selection") assignedId = null;
     container.dispatchEvent(new CustomEvent(`review:${name}`, { detail }));
     if (initialized) paint();
   });
   initialized = true;
   const labels = state.labels;
-  const left = labels.find((l) => l.direction === "left"), right = labels.find((l) => l.direction === "right");
+  const left = labels.find((l) => l.direction === "left");
+  const right = labels.find((l) => l.direction === "right");
+  const dialogs = createDialogs(root, token, () => destroyed);
   function guard() {
     if (destroyed) throw new Error("This annotator has been destroyed.");
   }
@@ -2693,33 +3111,40 @@ function mountReview(container, options) {
       return void 0;
     }
   }
+  function labelName(labelId) {
+    return labels.find((l) => l.id === labelId).name;
+  }
   function paint() {
     if (destroyed) return;
     const annotations = state.read();
-    for (const direction of ["left", "right"]) {
-      const label = labels.find((l) => l.direction === direction);
-      CSS.highlights.set(names[direction], new Highlight(...annotations.filter((a) => a.labelId === label.id).map((a) => text2.range(a.start, a.end))));
-    }
     const pending = state.pending;
-    CSS.highlights.set(names.pending, new Highlight(...pending ? [text2.range(pending.start, pending.end)] : []));
     const active = annotations.find((a) => a.id === state.activeId);
-    CSS.highlights.set(names.active, new Highlight(...active ? [text2.range(active.start, active.end)] : []));
-    count.textContent = `Annotations (${annotations.length})`;
-    list.replaceChildren();
-    for (const a of annotations) {
-      const item = element("li");
-      const label = labels.find((l) => l.id === a.labelId);
-      const button = element("button", "review-saved-item", `${label.name}: ${a.quote}`);
-      button.type = "button";
-      button.dataset.annotationId = a.id;
-      button.setAttribute("aria-pressed", String(state.activeId === a.id));
-      item.append(button);
-      list.append(item);
-    }
-    mode.textContent = precise ? "Precise selection \xB7 arrows move \xB7 Shift+arrows select \xB7 F2 keeps range \xB7 Escape cancels" : "Read-only \xB7 F2 for precise keyboard selection";
+    paintHighlights({ names, text: text2, labels, annotations, pending, active });
+    renderSavedList({ list, count, labels, annotations, activeId: state.activeId });
+    paintWhisperNow();
     if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
-    else if (active) announce(`Editing ${labels.find((l) => l.id === active.labelId).name}: ${active.quote.slice(0, 100)}`);
+    else if (active) announce(`Editing ${labelName(active.labelId)}: ${active.quote.slice(0, 100)}`);
   }
+  function paintWhisperNow() {
+    const annotations = state.read();
+    const active = annotations.find((a) => a.id === state.activeId);
+    paintWhisper({ whisper, layout, surface, text: text2, labels, annotations, pending: state.pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded, held: pointerHeld });
+  }
+  let pointerHeld = false;
+  function releasePointer() {
+    if (!pointerHeld) return;
+    pointerHeld = false;
+    if (!destroyed) safe(paintWhisperNow);
+  }
+  listen(surface, "pointerdown", () => {
+    pointerHeld = true;
+  });
+  listen(document, "pointerup", releasePointer);
+  listen(document, "pointercancel", releasePointer);
+  const reflow = new ResizeObserver(() => {
+    if (!destroyed) repositionWhisper(whisper, layout);
+  });
+  reflow.observe(surface);
   function nativeRange() {
     const selection = getSelection();
     if (!selection.rangeCount || selection.isCollapsed) return null;
@@ -2728,11 +3153,12 @@ function mountReview(container, options) {
     return range;
   }
   function syncSelection() {
-    if (destroyed || gesture?.swipe || dialog) return;
+    if (destroyed || dialogs.isOpen) return;
     const range = nativeRange();
     if (!range) return;
     const { start, end } = text2.fromRange(range);
-    if (start < end && (state.pending?.start !== start || state.pending?.end !== end)) state.select(start, end);
+    const unchanged = state.pending?.start === start && state.pending?.end === end;
+    if (start < end && !unchanged) state.select(start, end);
   }
   function resetNative() {
     if (nativeRange()) getSelection().removeAllRanges();
@@ -2740,13 +3166,13 @@ function mountReview(container, options) {
   function classify(label) {
     syncSelection();
     const saved = state.classify(label.id);
-    if (saved) {
-      precise = false;
-      resetNative();
-      paint();
-      announce(`${label.name} assigned. ${state.read().length} saved annotations.`);
-    }
-    return !!saved;
+    if (!saved) return false;
+    precise = false;
+    if (saved.id !== state.activeId) assignedId = saved.id;
+    resetNative();
+    paint();
+    announce(`${label.name} assigned. ${state.read().length} saved annotations.`);
+    return true;
   }
   function focusRange(annotation) {
     const range = text2.range(annotation.start, annotation.end);
@@ -2764,17 +3190,24 @@ function mountReview(container, options) {
     const annotations = state.read();
     if (!annotations.length) return false;
     const index = annotations.findIndex((a) => a.id === state.activeId);
-    activate(annotations[index < 0 ? delta > 0 ? 0 : annotations.length - 1 : (index + delta + annotations.length) % annotations.length].id);
+    let next;
+    if (index < 0) next = delta > 0 ? 0 : annotations.length - 1;
+    else next = (index + delta + annotations.length) % annotations.length;
+    activate(annotations[next].id);
     return true;
   }
   function moveBlock(delta) {
     if (!blocks.length) return false;
     const index = blocks.indexOf(focusedBlock);
-    blocks[Math.max(0, Math.min(blocks.length - 1, index < 0 ? delta > 0 ? 0 : blocks.length - 1 : index + delta))].focus();
+    let next;
+    if (index < 0) next = delta > 0 ? 0 : blocks.length - 1;
+    else next = Math.max(0, Math.min(blocks.length - 1, index + delta));
+    blocks[next].focus();
     return true;
   }
   function selectBlock() {
-    const block = surface.contains(document.activeElement) ? selectableBlock(document.activeElement) ?? focusedBlock : focusedBlock;
+    const focusedInside = surface.contains(document.activeElement);
+    const block = focusedInside ? selectableBlock(document.activeElement) ?? focusedBlock : focusedBlock;
     if (!block) return moveBlock(1);
     if (!(block instanceof HTMLElement) || !surface.contains(block) || !block.matches(BLOCK_SELECTOR)) return false;
     const range = document.createRange();
@@ -2806,111 +3239,73 @@ function mountReview(container, options) {
     selection.removeAllRanges();
     selection.addRange(range);
     paint();
+    announce(PRECISE_MODE);
     return true;
-  }
-  function closeDialog(value) {
-    dialog?.close(value);
-  }
-  function openDialog(title, content) {
-    if (dialog) return null;
-    const previousFocus = document.activeElement;
-    const modal = element("dialog", "review-dialog");
-    const heading = element("h2", "", title);
-    heading.id = `${token}-dialog-title`;
-    modal.setAttribute("aria-labelledby", heading.id);
-    modal.append(heading, content);
-    const dismiss = element("button", "", "Cancel");
-    dismiss.type = "button";
-    dismiss.addEventListener("click", () => modal.close("cancel"));
-    modal.append(dismiss);
-    root.append(modal);
-    dialog = modal;
-    modal.addEventListener("close", () => {
-      dialog = null;
-      modal.remove();
-      if (!destroyed && previousFocus?.isConnected) previousFocus.focus();
-    }, { once: true });
-    modal.addEventListener("cancel", (event) => {
-      event.preventDefault();
-      modal.close("cancel");
-    });
-    modal.addEventListener("keydown", (event) => {
-      if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
-      const buttons = [...modal.querySelectorAll("button")];
-      const index = buttons.indexOf(document.activeElement);
-      buttons[(index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length].focus();
-      event.preventDefault();
-    });
-    modal.showModal();
-    modal.querySelector("button")?.focus();
-    return modal;
   }
   function chooseOverlap(annotations) {
-    const content = element("div", "review-choices");
-    for (const a of annotations) {
-      const button = element("button", "", `${labels.find((l) => l.id === a.labelId).name}: ${a.quote}`);
-      button.type = "button";
-      button.addEventListener("click", () => {
+    const choices = annotations.map((a) => ({
+      title: `${labelName(a.labelId)}: ${a.quote}`,
+      onChoose: () => {
         state.activate(a.id);
-        closeDialog("selected");
-      });
-      content.append(button);
-    }
-    openDialog("Choose an annotation", content);
+        dialogs.close("selected");
+      }
+    }));
+    dialogs.open("Choose an annotation", choiceList(choices));
   }
   function showHelp() {
-    const content = element("dl", "review-shortcuts");
-    for (const [command2, keys] of Object.entries(shortcuts.display)) content.append(element("dt", "", command2), element("dd", "", keys.join(" / ")));
-    content.append(element("dt", "", "Native selection"), element("dd", "", "Tab / Shift+Tab: normal focus. In F2 mode: arrows move; Shift+arrows select; Ctrl+Shift+Left/Right (Windows/Linux) or Alt+Shift+Left/Right (macOS) extends by word."));
-    openDialog("Keyboard shortcuts", content);
+    dialogs.open("Keyboard shortcuts", shortcutHelp({ display: shortcuts.display, mac: shortcuts.mac, left, right }), "Close");
     return true;
+  }
+  async function resolvePending() {
+    const choices = [["left", left.name], ["right", right.name], ["discard", "Discard pending selection"]].map(([value, title2]) => ({
+      title: title2,
+      onChoose: () => dialogs.close(value)
+    }));
+    const modal = dialogs.open("Resolve pending selection", choiceList(choices));
+    if (!modal) return false;
+    const choice = await new Promise((resolve) => modal.addEventListener("close", () => resolve(modal.returnValue), { once: true }));
+    if (destroyed || !["left", "right", "discard"].includes(choice)) return false;
+    if (choice === "discard") {
+      state.clear();
+      resetNative();
+    } else {
+      classify(choice === "left" ? left : right);
+    }
+    return true;
+  }
+  async function runFinish() {
+    syncSelection();
+    if (state.pending && !await resolvePending()) return null;
+    const data = state.export(format);
+    const revision = state.revision;
+    try {
+      await options.onFinish?.(structuredClone(data));
+      if (!destroyed && (state.revision !== revision || state.pending)) {
+        throw new Error("The review changed while saving. Export again; all annotations are retained.");
+      }
+    } catch (err) {
+      error(err);
+      throw err;
+    }
+    if (destroyed) return null;
+    container.dispatchEvent(new CustomEvent("review:complete", { detail: structuredClone(data) }));
+    announce("Review complete. Annotations remain available for export or retry.");
+    return data;
   }
   async function finish() {
     guard();
     if (finishPromise) return finishPromise;
-    finishPromise = (async () => {
-      syncSelection();
-      if (state.pending) {
-        const content = element("div", "review-choices");
-        for (const [value, title] of [["left", left.name], ["right", right.name], ["discard", "Discard pending selection"]]) {
-          const button = element("button", "", title);
-          button.type = "button";
-          button.addEventListener("click", () => closeDialog(value));
-          content.append(button);
-        }
-        const modal = openDialog("Resolve pending selection", content);
-        if (!modal) return null;
-        const choice = await new Promise((resolve) => modal.addEventListener("close", () => resolve(modal.returnValue), { once: true }));
-        if (destroyed || !["left", "right", "discard"].includes(choice)) return null;
-        if (choice === "discard") {
-          state.clear();
-          resetNative();
-        } else classify(choice === "left" ? left : right);
-      }
-      const data = state.export(format);
-      const revision = state.revision;
-      try {
-        await options.onFinish?.(structuredClone(data));
-        if (!destroyed && (state.revision !== revision || state.pending)) throw new Error("The review changed while saving. Export again; all annotations are retained.");
-      } catch (err) {
-        error(err);
-        throw err;
-      }
-      if (destroyed) return null;
-      container.dispatchEvent(new CustomEvent("review:complete", { detail: structuredClone(data) }));
-      announce("Review complete. Annotations remain available for export or retry.");
-      return data;
-    })();
+    finishPromise = runFinish();
     try {
       return await finishPromise;
     } finally {
       finishPromise = null;
     }
   }
-  function command(name) {
-    guard();
-    if (name === "left" || name === "right") return classify(name === "left" ? left : right);
-    if (name === "clear") {
+  const commands = {
+    left: () => classify(left),
+    right: () => classify(right),
+    clear() {
       if (!precise && !state.pending && !state.activeId && !nativeRange()) return false;
       precise = false;
       state.clear();
@@ -2918,8 +3313,8 @@ function mountReview(container, options) {
       paint();
       announce("Selection cleared.");
       return true;
-    }
-    if (name === "remove") {
+    },
+    remove() {
       if (state.pending) {
         state.clear();
         resetNative();
@@ -2930,46 +3325,75 @@ function mountReview(container, options) {
         announce("Annotation deleted. Undo restores it.");
       }
       return true;
-    }
-    if (name === "undo" || name === "redo") {
-      const canceled = !!(precise || state.pending || state.activeId || nativeRange());
-      precise = false;
-      resetNative();
-      const changed = state[name]();
-      if (!canceled && !changed) return false;
-      surface.focus();
-      paint();
-      announce(name === "undo" ? "Undone." : "Redone.");
-      return true;
-    }
-    if (name === "nextBlock") return moveBlock(1);
-    if (name === "previousBlock") return moveBlock(-1);
-    if (name === "nextAnnotation") return navigateAnnotation(1);
-    if (name === "previousAnnotation") return navigateAnnotation(-1);
-    if (name === "selectBlock") return selectBlock();
-    if (name === "precise") return togglePrecise();
-    if (name === "help") return showHelp();
-    if (name === "finish") {
+    },
+    undo: () => travelCommand("undo"),
+    redo: () => travelCommand("redo"),
+    nextBlock: () => moveBlock(1),
+    previousBlock: () => moveBlock(-1),
+    nextAnnotation: () => navigateAnnotation(1),
+    previousAnnotation: () => navigateAnnotation(-1),
+    selectBlock,
+    precise: togglePrecise,
+    help: showHelp,
+    finish() {
       void finish().catch(() => {
       });
       return true;
-    }
-    if (name === "export") {
+    },
+    export() {
       container.dispatchEvent(new CustomEvent("review:export", { detail: state.export(format) }));
       announce("Export ready. Pending selection remains excluded.");
       return true;
     }
-    return false;
+  };
+  function travel(direction) {
+    precise = false;
+    resetNative();
+    const changed = state[direction]();
+    paint();
+    return changed;
   }
-  for (const [name, title] of [["left", left.name], ["right", right.name], ["clear", "Clear selection"], ["remove", "Delete annotation"], ["undo", "Undo"], ["redo", "Redo"], ["previousBlock", "Previous block"], ["nextBlock", "Next block"], ["selectBlock", "Select block"], ["precise", "Precise selection"], ["previousAnnotation", "Previous annotation"], ["nextAnnotation", "Next annotation"], ["export", "Export files"], ["finish", "Done"], ["help", "Shortcut help"]]) {
-    const button = element("button", `review-command review-${name}`, title);
+  function travelCommand(direction) {
+    const canceled = !!(precise || state.pending || state.activeId || nativeRange());
+    const changed = travel(direction);
+    if (!canceled && !changed) return false;
+    surface.focus();
+    announce(direction === "undo" ? "Undone." : "Redone.");
+    return true;
+  }
+  function command(name) {
+    guard();
+    if (!Object.hasOwn(commands, name)) return false;
+    return commands[name]();
+  }
+  function bindCommand(button, name, label) {
     button.type = "button";
     button.dataset.command = name;
-    button.title = `${title} (${shortcuts.display[name].join(" / ")})`;
-    button.setAttribute("aria-keyshortcuts", shortcuts.effective[name].join(" ").replace(/\bmod\b/gi, /Mac/.test(navigator.platform) ? "Meta" : "Control").replace(/\bctrl\b/gi, "Control"));
-    toolbar.append(button);
+    button.title = `${label} (${shortcuts.display[name].join(" / ")})`;
+    button.setAttribute("aria-keyshortcuts", shortcuts.aria[name]);
   }
-  listen(toolbar, "click", (event) => {
+  for (const [name, fixedTitle] of ACTIONS) {
+    const button = element("button", `review-command review-${name}`, fixedTitle ?? void 0);
+    if (name === "left") button.append(element("span", "", "\u2190 "), left.name);
+    if (name === "right") button.append(right.name, element("span", "", " \u2192"));
+    for (const arrow of button.querySelectorAll("span")) arrow.setAttribute("aria-hidden", "true");
+    bindCommand(button, name, fixedTitle ?? (name === "left" ? left.name : right.name));
+    actions.append(button);
+  }
+  bindCommand(helpButton, "help", "Shortcut help");
+  helpButton.setAttribute("aria-label", "Shortcut help");
+  helpButton.setAttribute("aria-haspopup", "dialog");
+  bindCommand(done, "finish", "Done");
+  function setExpanded(value) {
+    expanded = value;
+    if (!value && actions.contains(document.activeElement)) more.focus();
+    actions.hidden = !value;
+    title.hidden = value;
+    more.setAttribute("aria-expanded", String(value));
+    paint();
+  }
+  listen(more, "click", () => safe(() => setExpanded(!expanded)));
+  listen(navbar, "click", (event) => {
     const button = event.target.closest("[data-command]");
     if (button) safe(() => command(button.dataset.command));
   });
@@ -2988,116 +3412,67 @@ function mountReview(container, options) {
   listen(surface, "beforeinput", (event) => event.preventDefault());
   listen(surface, "paste", (event) => event.preventDefault());
   listen(surface, "cut", (event) => event.preventDefault());
-  function pointAt(x2, y2) {
-    const point = document.caretPositionFromPoint?.(x2, y2);
-    if (point && surface.contains(point.offsetNode)) return text2.offset(point.offsetNode, point.offset);
-    const range = document.caretRangeFromPoint?.(x2, y2);
-    if (range && surface.contains(range.startContainer)) return text2.offset(range.startContainer, range.startOffset);
-    return null;
-  }
-  function hitRange(anchor, x2, y2) {
-    return [...text2.range(anchor.start, anchor.end).getClientRects()].some((r) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom);
-  }
-  function cancelGesture() {
-    gesture?.preview?.remove();
-    if (gesture?.swipe && surface.hasPointerCapture?.(gesture.id)) surface.releasePointerCapture(gesture.id);
-    gesture = null;
-  }
-  listen(surface, "pointerdown", (event) => {
-    if (event.button !== 0 || !event.isPrimary) return;
-    const pending = state.pending;
-    const swipe = !!pending && hitRange(pending, event.clientX, event.clientY);
-    gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, swipe, target: event.target };
-    if (swipe) {
-      event.preventDefault();
-      surface.setPointerCapture(event.pointerId);
-      const preview = element("div", "review-swipe-preview", pending.quote);
-      preview.setAttribute("aria-hidden", "true");
-      root.append(preview);
-      gesture.preview = preview;
-    }
-  });
-  listen(surface, "pointermove", (event) => {
-    if (!gesture?.swipe || gesture.id !== event.pointerId) return;
-    const dx = event.clientX - gesture.x;
-    const preview = gesture.preview;
-    preview.hidden = Math.abs(dx) < 8;
-    preview.textContent = `${dx < 0 ? left.name : right.name} \xB7 ${state.pending?.quote ?? ""}`;
-    preview.style.left = `${Math.max(8, Math.min(innerWidth - 280, event.clientX + 12))}px`;
-    preview.style.top = `${Math.max(8, Math.min(innerHeight - 100, event.clientY + 15))}px`;
-  });
-  listen(surface, "pointerup", (event) => safe(() => {
-    if (!gesture || gesture.id !== event.pointerId) return;
-    const current = gesture;
-    const dx = event.clientX - current.x, dy = event.clientY - current.y;
-    cancelGesture();
-    if (current.swipe) {
-      const direction = swipeDirection(dx, dy);
-      if (direction) classify(direction === "left" ? left : right);
-      return;
-    }
-    if (nativeRange() || Math.hypot(dx, dy) > 4) {
-      syncSelection();
-      return;
-    }
-    const at = pointAt(event.clientX, event.clientY);
-    const saved = at === null ? [] : state.read().filter((a) => at >= a.start && at < a.end && hitRange(a, event.clientX, event.clientY));
-    resetNative();
-    precise = false;
-    if (saved.length > 1) {
-      chooseOverlap(saved);
-      return;
-    }
-    if (saved.length === 1) {
-      activate(saved[0].id);
-      return;
-    }
-    const block = selectableBlock(current.target);
-    if (block && surface.contains(block)) {
-      block.focus({ preventScroll: true });
-      selectBlock();
-    } else state.clear();
-  }));
-  listen(surface, "pointercancel", cancelGesture);
-  listen(surface, "lostpointercapture", cancelGesture);
-  listen(document, "pointerup", (event) => {
-    if (gesture && !gesture.swipe && !surface.contains(event.target)) {
-      syncSelection();
-      cancelGesture();
-    }
+  installPointerInput({
+    surface,
+    text: text2,
+    state,
+    left,
+    right,
+    dialogs,
+    listen,
+    safe,
+    classify,
+    syncSelection,
+    nativeRange,
+    resetNative,
+    exitPrecise() {
+      precise = false;
+    },
+    chooseOverlap,
+    activate,
+    selectBlock
   });
   listen(document, "pointerdown", (event) => {
-    if (!root.contains(event.target)) {
-      state.clear();
-      precise = false;
-      cancelGesture();
-    }
+    if (root.contains(event.target)) return;
+    if (!precise) return;
+    precise = false;
+    paint();
   });
-  listen(root, "keydown", (event) => {
-    if (event.isComposing || event.target.isContentEditable || event.target.closest("input,textarea,select")) return;
-    if (dialog) return;
-    if (event.key === "Escape" && gesture?.swipe) {
-      event.preventDefault();
-      cancelGesture();
+  function movePreciseCaret(event) {
+    event.preventDefault();
+    const selection = getSelection();
+    const previous = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
+    const byWord = shortcuts.mac ? event.altKey : event.ctrlKey;
+    const granularity = byWord ? "word" : vertical ? "line" : "character";
+    selection.modify(event.shiftKey ? "extend" : "move", backward ? "backward" : "forward", granularity);
+    const escaped = !surface.contains(selection.anchorNode) || !surface.contains(selection.focusNode);
+    if (escaped && previous) {
+      selection.removeAllRanges();
+      selection.addRange(previous);
+    }
+    if (selection.isCollapsed) {
+      state.clear();
       return;
     }
-    if (precise && surface.contains(event.target) && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+    safe(syncSelection);
+  }
+  listen(root, "keydown", (event) => {
+    if (event.isComposing || event.target.isContentEditable || event.target.closest("input,textarea,select")) return;
+    if (dialogs.isOpen) return;
+    if (expanded && event.key === "Escape") {
+      setExpanded(false);
       event.preventDefault();
-      const selection = getSelection();
-      const old = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-      const backward = ["ArrowLeft", "ArrowUp"].includes(event.key);
-      const word = /Mac/.test(navigator.platform) ? event.altKey : event.ctrlKey;
-      selection.modify(event.shiftKey ? "extend" : "move", backward ? "backward" : "forward", word ? "word" : ["ArrowUp", "ArrowDown"].includes(event.key) ? "line" : "character");
-      if ((!surface.contains(selection.anchorNode) || !surface.contains(selection.focusNode)) && old) {
-        selection.removeAllRanges();
-        selection.addRange(old);
-      }
-      if (selection.isCollapsed) state.clear();
-      else safe(syncSelection);
+      return;
+    }
+    if (precise && surface.contains(event.target) && ARROW_KEYS.includes(event.key)) {
+      movePreciseCaret(event);
       return;
     }
     const name = shortcuts.command(event);
-    if (!name || name === "selectBlock" && event.target.closest("button,a")) return;
+    if (!name) return;
+    if (name === "selectBlock" && event.target.closest("button,a")) return;
     if (safe(() => command(name))) event.preventDefault();
   });
   paint();
@@ -3137,13 +3512,11 @@ function mountReview(container, options) {
     },
     undo() {
       guard();
-      resetNative();
-      return state.undo();
+      return travel("undo");
     },
     redo() {
       guard();
-      resetNative();
-      return state.redo();
+      return travel("redo");
     },
     export(exportFormat = format) {
       guard();
@@ -3157,8 +3530,8 @@ function mountReview(container, options) {
       if (destroyed) return;
       destroyed = true;
       listeners.abort();
-      cancelGesture();
-      dialog?.close("cancel");
+      reflow.disconnect();
+      dialogs.close("cancel");
       for (const name of Object.values(names)) CSS.highlights.delete(name);
       if (nativeRange()) getSelection().removeAllRanges();
       container.replaceChildren(...original);

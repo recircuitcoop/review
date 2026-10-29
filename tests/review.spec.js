@@ -5,9 +5,16 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.review);
 });
 
+// Label, history and export buttons live in the ••• action strip, as a mouse user finds them.
+async function openActions(page) {
+  const toggle = page.getByRole('button', { name: 'Annotation actions' });
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+}
+
 test('block click, shared buttons, history, and independent overlapping annotation chooser', async ({ page }) => {
   await page.locator('.review-document p').first().click();
   expect(await page.evaluate(() => review.read())).toHaveLength(0);
+  await openActions(page);
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
   expect(await page.evaluate(() => review.read())).toHaveLength(1);
   await page.evaluate(() => { review.select(15, 45); });
@@ -28,6 +35,7 @@ test('exact native selection crosses formatting and canonical anchors survive re
     return r.toString();
   });
   await page.waitForTimeout(50);
+  await openActions(page);
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
   expect((await page.evaluate(() => review.read()))[0].quote).toBe(result);
   const before = await page.evaluate(() => review.export());
@@ -35,19 +43,39 @@ test('exact native selection crosses formatting and canonical anchors survive re
   expect(await page.evaluate(() => review.export())).toEqual(before);
 });
 
-test('separate swipe commits once; canceled gestures retain pending range', async ({ page }) => {
+test('a mouse drag starting on pending text adjusts the native selection and never labels', async ({ page }) => {
   const block = page.locator('.review-document p').first();
   await block.click();
   const box = await block.boundingBox();
   const x = box.x + 45, y = box.y + 10;
-  await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 25, y, { steps: 4 }); await page.mouse.up();
-  expect(await page.evaluate(() => review.read())).toHaveLength(0);
   await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 95, y, { steps: 8 }); await page.mouse.up();
+  expect(await page.evaluate(() => review.read())).toHaveLength(0);
+  const dragged = await page.evaluate(() => getSelection().toString());
+  expect(dragged.length).toBeGreaterThan(0);
+  // The pending range now mirrors the dragged text, not the clicked paragraph.
+  await openActions(page);
+  await page.getByRole('button', { name: 'Accept', exact: true }).click();
+  expect((await page.evaluate(() => review.read()))[0].quote).toBe(dragged);
+});
+
+test('browser-generated horizontal wheel over pending text labels once; vertical wheel does not', async ({ page }) => {
+  const block = page.locator('.review-document p').first();
+  await block.click();
+  const box = await block.boundingBox();
+  await page.mouse.move(box.x + 45, box.y + 10);
+  await page.mouse.wheel(0, 40);
+  expect(await page.evaluate(() => review.read())).toHaveLength(0);
+  // Re-read geometry: the vertical wheel may have scrolled the document.
+  const moved = await block.boundingBox();
+  await page.mouse.move(moved.x + 45, moved.y + 10);
+  await page.mouse.wheel(-40, 0);
+  await page.mouse.wheel(-40, 0);
   const annotations = await page.evaluate(() => review.read());
-  expect(annotations).toHaveLength(1); expect(annotations[0].labelId).toBe('reject');
+  expect(annotations).toHaveLength(1); expect(annotations[0].labelId).toBe('accept');
 });
 
 test('clicks select list items and code blocks; keyboard navigation reaches both', async ({ page }) => {
+  await openActions(page);
   await page.locator('.review-document li').first().click();
   expect(await page.evaluate(() => review.read())).toHaveLength(0);
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
@@ -62,8 +90,13 @@ test('clicks select list items and code blocks; keyboard navigation reaches both
 
 for (const platform of ['Win32', 'Linux x86_64', 'MacIntel']) {
   test(`modifier routing for ${platform} (simulated platform detection)`, async ({ page }) => {
-    await page.addInitScript(value => Object.defineProperty(navigator, 'platform', { configurable: true, value }), platform);
+    // userAgentData is cleared so detection falls back to the simulated navigator.platform.
+    await page.addInitScript(value => {
+      Object.defineProperty(navigator, 'platform', { configurable: true, value });
+      Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: undefined });
+    }, platform);
     await page.goto('/tests/fixture.html'); await page.waitForFunction(() => window.review);
+    await openActions(page);
     await page.locator('.review-document li').first().click();
     await page.getByRole('button', { name: 'Accept', exact: true }).click();
     await page.locator('.review-document').focus();
@@ -123,6 +156,7 @@ test('a local Markdown file produces both downloadable label files and can resto
   await page.getByLabel('Markdown file').setInputFiles('tests/fixtures/review.md');
   await page.getByRole('button', { name: 'Start review' }).click();
   await page.locator('.review-document p').first().click();
+  await openActions(page);
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
   const downloads = [];
   page.on('download', d => downloads.push(d));
@@ -149,4 +183,89 @@ test('a local Markdown file produces both downloadable label files and can resto
   await page.getByLabel('Restore label JSON files').setInputFiles(payloads.map((payload, i) => ({ name: `label-${i}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(payload)) })));
   await expect(page.getByRole('status').first()).toContainText('Restored 1 annotations');
   await expect(page.locator('#downloads a')).toHaveCount(0);
+});
+
+test('••• swap keeps navbar and document still; real Escape collapses first; Export files, Mod+Shift+E, icon and F1 help', async ({ page }) => {
+  const navbar = page.locator('.review-navbar'), surface = page.locator('.review-document'), whisper = page.locator('.review-whisper');
+  await page.evaluate(() => { window.exports = 0; document.querySelector('#fixture').addEventListener('review:export', () => window.exports++); });
+  await page.locator('.review-document p').first().click();
+  await expect(whisper).toBeVisible();
+  const before = [await navbar.boundingBox(), await surface.boundingBox()];
+  expect(before[0].height).toBe(62);
+  await page.getByRole('button', { name: 'Annotation actions' }).click();
+  const exportButton = page.getByRole('button', { name: 'Export files', exact: true });
+  await expect(exportButton).toBeVisible();
+  expect([await navbar.boundingBox(), await surface.boundingBox()]).toEqual(before);
+  await exportButton.click();
+  // Shortcuts apply while focus is inside the annotator (WebKit does not focus clicked buttons).
+  await surface.focus();
+  await page.keyboard.press('ControlOrMeta+Shift+E');
+  expect(await page.evaluate(() => window.exports)).toBe(2);
+  await page.getByRole('button', { name: 'Annotation actions' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(exportButton).toBeHidden();
+  await expect(whisper).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(whisper).toBeHidden();
+  const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  await page.getByRole('button', { name: 'Shortcut help' }).click();
+  await expect(dialog).toBeVisible();
+  const viaIcon = await dialog.textContent();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await surface.focus();
+  await page.keyboard.press('F1');
+  await expect(dialog).toBeVisible();
+  expect(await dialog.textContent()).toBe(viaIcon);
+});
+
+// The same real-input sequence with the whisper hidden is the native baseline.
+async function freshFixture(page, hideWhisper) {
+  await page.goto('/tests/fixture.html');
+  await page.waitForFunction(() => window.review);
+  // Hiding also drops the room reserved below the passage, leaving plain native layout.
+  if (hideWhisper) await page.addStyleTag({ content: '.review-whisper { display: none !important; } .review-document [style] { margin-bottom: revert !important; }' });
+}
+
+test('precise Shift+ArrowDown crosses blocks past a visible whisper exactly as without it; F2 then label saves the full range', async ({ page }) => {
+  async function run(hideWhisper) {
+    await freshFixture(page, hideWhisper);
+    await page.locator('.review-document p').first().focus();
+    await page.keyboard.press('F2');
+    if (!hideWhisper) await expect(page.locator('.review-whisper')).toBeVisible();
+    const lengths = [];
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Shift+ArrowDown');
+      lengths.push(await page.evaluate(() => getSelection().toString().length));
+    }
+    await page.keyboard.press('F2');
+    await page.keyboard.press('Alt+ArrowRight');
+    const saved = await page.evaluate(() => review.read());
+    return { lengths, quote: saved[0]?.quote };
+  }
+  const baseline = await run(true);
+  const visible = await run(false);
+  // Each Shift+ArrowDown must reach a new line: no dead keypresses at block boundaries.
+  for (let i = 1; i < baseline.lengths.length; i++) expect(baseline.lengths[i]).toBeGreaterThan(baseline.lengths[i - 1]);
+  expect(visible).toEqual(baseline);
+});
+
+test('a mouse drag across a visible whisper selects the same text as without it', async ({ page }) => {
+  async function run(hideWhisper) {
+    await freshFixture(page, hideWhisper);
+    const paragraphs = page.locator('.review-document p');
+    await paragraphs.first().click();
+    if (!hideWhisper) await expect(page.locator('.review-whisper')).toBeVisible();
+    const from = await paragraphs.nth(0).boundingBox(), to = await paragraphs.nth(1).boundingBox();
+    await page.mouse.move(from.x + 45, from.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(to.x + 120, to.y + 10, { steps: 12 });
+    await page.mouse.up();
+    await openActions(page);
+    await page.getByRole('button', { name: 'Accept', exact: true }).click();
+    return (await page.evaluate(() => review.read()))[0]?.quote;
+  }
+  const baseline = await run(true);
+  expect(baseline).toContain('\n');
+  expect(await run(false)).toBe(baseline);
 });

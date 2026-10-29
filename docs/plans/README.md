@@ -4,17 +4,17 @@ Seed: [selection-swipe-library.md](../../selection-swipe-library.md). The seed r
 
 Plans **01–12** are complete for core/local acceptance. **14** is complete with both real downloads verified in the initial nine-job CI matrix. **15** (saved-review reopening) and **16** (night theme) are implemented and locally verified; expanded CI and remaining native accessibility checks are pending. **13** remains open: the initial Windows/Linux/macOS × Chromium/Firefox/WebKit run passed, but the newer feature/shortcut tests must pass that gate too. See [verification](../VERIFICATION.md).
 
-Latest recorded local proof: **21 Node tests**, **31 core browser checks**, and **9 host checks**. The browser pages passed in Chromium and Safari on macOS. The earlier [green CI run](https://github.com/recircuitcoop/review/actions/runs/39318606377) covers 17 Node tests and 10 browser tests per job; it does not cover the subsequent unpublished changes. Displayed shortcuts now use Cmd on macOS and Ctrl elsewhere; the new remapping/display regression passed locally.
+Latest recorded local proof (2026-10-29, `CI=1 npm run check`): **26 Node tests** and **57 Playwright cases** (19 per engine across Chromium, Firefox and WebKit) on macOS; CI on the plan 25 head is pending. The earlier [green CI run](https://github.com/recircuitcoop/review/actions/runs/39318606377) covers 17 Node tests and 10 browser tests per job; it does not cover subsequent changes. Displayed shortcuts use Cmd on macOS and Ctrl elsewhere.
 
 ## Newly requested interaction work
 
-The user reports that desktop swiping is not understandable. Following a joint UX-expert/senior-frontend review, plans **17–20** are documented and **not implemented**. The preferred desktop prototype is **select → hover the highlight → native horizontal scroll → label**. The user rejected dragged-text/handle instructions and custom diagonal recognition. Preserve OS/browser scrolling, zoom and navigation; do not transfer the pointer prototype's thresholds to wheel input. Mobile selection/swiping has a separate native-device gate.
+The user reports that desktop swiping is not understandable. Following a joint UX-expert/senior-frontend review, plans **17–20** were documented; native horizontal-scroll labeling has since been implemented under [25](25-ASSESSMENT-REMEDIATION.md), replacing the pointer swipe, while the study, hardware and mobile gates remain unverified. The preferred desktop prototype is **select → hover the highlight → native horizontal scroll → label**. The user rejected dragged-text/handle instructions and custom diagonal recognition. Preserve OS/browser scrolling, zoom and navigation; do not transfer the pointer prototype's thresholds to wheel input. Mobile selection/swiping has a separate native-device gate.
 
 Proceed **17 → 18 → 19 → 20**, with no implementation past a failed prerequisite. Existing 07 checks prove the earlier prototype within their recorded limits, not acceptance of this new UX. Existing 13 remains open; its desktop interaction claims must include the relevant new desktop evidence. See the [user decisions and joint review](17-NATIVE-SCROLL-UX-PROTOTYPE.md).
 
 ## Working method
 
-Widget visual planning is tracked in [21 — Library widget design](21-LIBRARY-WIDGET-DESIGN.md), with accepted flow decisions in [22](22-WHISPER-USER-FLOW-REVIEW.md). The lo-fi is approved; [23 — High fidelity](23-WIDGET-HIGH-FIDELITY.md) is ready for user review. A fixed-height toolbar swaps in through •••. The contextual whisper uses actual label values, explicit checked assignment and no idle row; the keyboard icon opens shortcut help. Done is the only user-facing export action. These design gates precede production UI work in 18/19 and do not replace native-input proof.
+Widget visual planning is tracked in [21 — Library widget design](21-LIBRARY-WIDGET-DESIGN.md), with accepted flow decisions in [22](22-WHISPER-USER-FLOW-REVIEW.md). The lo-fi and [23 — High fidelity](23-WIDGET-HIGH-FIDELITY.md) are approved and implemented in production. A fixed-height toolbar swaps in through •••. The contextual whisper uses actual label values, explicit checked assignment and no idle row; the keyboard icon opens shortcut help. Done and the retained Export files control are the user-facing export actions ([25](25-ASSESSMENT-REMEDIATION.md)). These design gates precede production UI work in 18/19 and do not replace native-input proof.
 
 Write any missing contract details in the owning plan before tests or code. Add the listed failing tests, implement only that slice, then check off its completion items with actual commands and evidence. Reuse the same fixtures and test harness. Do not invent commands before tooling exists.
 
@@ -48,6 +48,7 @@ Keep accessibility in every interaction slice. Use real browser tests for select
 | [22 — Whisper user-flow review](22-WHISPER-USER-FLOW-REVIEW.md) | Agree state-led guidance, correction flow and narrow/multiline priorities after UX/design/frontend review. | 21 selected direction; native instruction depends on 17 |
 | [23 — Widget high fidelity](23-WIDGET-HIGH-FIDELITY.md) | Refine the approved composition, palettes, typography and control states for user review. | 21/22 accepted lo-fi; before production UI |
 | [24 — Instance style configuration](24-INSTANCE-STYLE-CONFIGURATION.md) | Configure background, colours, buttons, typography, spacing and borders at mount; retain approved defaults. | 23 approved visual style |
+| [25 — Assessment remediation](25-ASSESSMENT-REMEDIATION.md) | Keep Export, implement 18 and 23, refactor the controller, fix defects, refresh records, land with green CI. | 18, 23 |
 
 ## Acceptance coverage
 
