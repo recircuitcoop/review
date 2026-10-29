@@ -1,6 +1,6 @@
 # 18 — Desktop hover and horizontal scroll
 
-Status: planned, not implemented. Depends on: 17. Reopens desktop gesture UX from 07; verification feeds 13 and 20.
+Status: implementation under [25](25-ASSESSMENT-REMEDIATION.md) (user-directed, ahead of 17's study), with the trigger rule recorded there; native desktop acceptance open. Depends on: 17. Reopens desktop gesture UX from 07; verification feeds 13 and 20.
 
 ## Outcome
 

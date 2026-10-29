@@ -9,7 +9,7 @@ The user approved the lo-fi flow and requested high fidelity. This refines 21/22
 - No whisper in idle reading or after clearing/Undo. A contextual row accompanies pending text, saved editing or the approved just-assigned confirmation.
 - Solid selection underline; actual configured names at opposite ends. The assigned value is explicit: `✓ Accept · Cmd+Z undo`, with matching endpoint and passage styling. Colours never replace names or the checkmark.
 - The keyboard icon opens a visible popup with keycaps, effective platform mapping, close/Escape and focus return. It preserves the review target.
-- No separate Export control/shortcut. Done resolves pending text and initiates the configured export/completion flow. Preview does not download files.
+- Done resolves pending text and initiates the configured export/completion flow. **Export files** and `Mod+Shift+E` remain in the ••• action strip (user decision, [25](25-ASSESSMENT-REMEDIATION.md); supersedes the earlier removal). Preview does not download files.
 - Changing label display examples preserves current preview annotations by stable label identity; production update compatibility remains a separate task.
 
 ## High-fidelity treatment

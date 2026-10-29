@@ -2,7 +2,7 @@
 
 Status: **specialist review; proposed flow, not implementation or user-tested copy**.
 
-Latest completion decision: **no standalone Export control** in the mounted interface or shortcut popup. Done resolves any pending range, then automatically runs the configured export/completion flow. Keep retryable failure handling and both label outputs. The host's programmatic export API remains available; this is a user-interface decision. The current lo-fi removes Export and calls the completion shortcut `Done & export`; it does not download files.
+**Superseded 2026-10-29 ([25](25-ASSESSMENT-REMEDIATION.md)): the user decided to keep the separate Export files control and `Mod+Shift+E`.** Earlier completion decision: **no standalone Export control** in the mounted interface or shortcut popup. Done resolves any pending range, then automatically runs the configured export/completion flow. Keep retryable failure handling and both label outputs. The host's programmatic export API remains available; this is a user-interface decision. The current lo-fi removes Export and calls the completion shortcut `Done & export`; it does not download files.
 
 Latest visibility correction: **no whisper in the idle reading state**. Hide the entire row, including both label names, whenever there is no passage being selected/reviewed. Clearing a selection or Undo removes the row; there is no `Select text to label` or `Annotation undone` whisper attached to unselected text. Pending text, an explicitly active saved annotation and the already-approved just-labeled passage confirmation retain their contextual row. The keyboard-help button remains available in the top bar. This supersedes idle/after-Undo centre-copy suggestions below.
 

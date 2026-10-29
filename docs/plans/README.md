@@ -14,7 +14,7 @@ Proceed **17 → 18 → 19 → 20**, with no implementation past a failed prereq
 
 ## Working method
 
-Widget visual planning is tracked in [21 — Library widget design](21-LIBRARY-WIDGET-DESIGN.md), with accepted flow decisions in [22](22-WHISPER-USER-FLOW-REVIEW.md). The lo-fi is approved; [23 — High fidelity](23-WIDGET-HIGH-FIDELITY.md) is ready for user review. A fixed-height toolbar swaps in through •••. The contextual whisper uses actual label values, explicit checked assignment and no idle row; the keyboard icon opens shortcut help. Done is the only user-facing export action. These design gates precede production UI work in 18/19 and do not replace native-input proof.
+Widget visual planning is tracked in [21 — Library widget design](21-LIBRARY-WIDGET-DESIGN.md), with accepted flow decisions in [22](22-WHISPER-USER-FLOW-REVIEW.md). The lo-fi is approved; [23 — High fidelity](23-WIDGET-HIGH-FIDELITY.md) is ready for user review. A fixed-height toolbar swaps in through •••. The contextual whisper uses actual label values, explicit checked assignment and no idle row; the keyboard icon opens shortcut help. Done and the retained Export files control are the user-facing export actions ([25](25-ASSESSMENT-REMEDIATION.md)). These design gates precede production UI work in 18/19 and do not replace native-input proof.
 
 Write any missing contract details in the owning plan before tests or code. Add the listed failing tests, implement only that slice, then check off its completion items with actual commands and evidence. Reuse the same fixtures and test harness. Do not invent commands before tooling exists.
 
@@ -48,6 +48,7 @@ Keep accessibility in every interaction slice. Use real browser tests for select
 | [22 — Whisper user-flow review](22-WHISPER-USER-FLOW-REVIEW.md) | Agree state-led guidance, correction flow and narrow/multiline priorities after UX/design/frontend review. | 21 selected direction; native instruction depends on 17 |
 | [23 — Widget high fidelity](23-WIDGET-HIGH-FIDELITY.md) | Refine the approved composition, palettes, typography and control states for user review. | 21/22 accepted lo-fi; before production UI |
 | [24 — Instance style configuration](24-INSTANCE-STYLE-CONFIGURATION.md) | Configure background, colours, buttons, typography, spacing and borders at mount; retain approved defaults. | 23 approved visual style |
+| [25 — Assessment remediation](25-ASSESSMENT-REMEDIATION.md) | Keep Export, implement 18 and 23, refactor the controller, fix defects, refresh records, land with green CI. | 18, 23 |
 
 ## Acceptance coverage
 

@@ -1,6 +1,6 @@
 # 17 — Native scrolling and first-use UX
 
-Status: planned, not implemented. First gate for 18–20. Date: 2026-10-20.
+Status: probe fixture being added under [25](25-ASSESSMENT-REMEDIATION.md); first-use study and native-device evidence **open**. Date: 2026-10-20. On 2026-10-29 the user directed 18 to proceed ahead of this gate; the gate still governs any discoverability or native-acceptance claim.
 
 ## Outcome
 
