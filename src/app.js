@@ -50,8 +50,6 @@ function installReview(options, payload) {
 }
 
 const reopen = document.querySelector('#reopen');
-// File/loading controls must not discard pending work before a candidate is validated.
-for (const controls of [form, reopen, document.querySelector('#host-actions')]) controls.addEventListener('pointerdown', event => event.stopPropagation());
 async function load(operation) {
   const buttons = [form, reopen].map(form => form.querySelector('button[type=submit]'));
   if (buttons.some(button => button.disabled)) return;

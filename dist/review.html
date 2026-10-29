@@ -3658,7 +3658,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     nextContainer.querySelector(".review-document").focus();
   }
   var reopen = document.querySelector("#reopen");
-  for (const controls of [form, reopen, document.querySelector("#host-actions")]) controls.addEventListener("pointerdown", (event) => event.stopPropagation());
   async function load(operation) {
     const buttons = [form, reopen].map((form2) => form2.querySelector("button[type=submit]"));
     if (buttons.some((button) => button.disabled)) return;
