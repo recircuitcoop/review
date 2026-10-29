@@ -250,7 +250,7 @@ await check('No-target shortcuts preserve browser defaults except scoped destruc
     equal(review.read(), []); equal(review.export().document.text, canonicalText(surface).text);
   } finally { review.destroy(); container.remove(); }
 });
-await check('Pending replacement, outside clicks, link suppression, and toolbar focus follow the interaction defaults', () => {
+await check('Pending replacement, host-control clicks, link suppression, and toolbar focus follow the interaction defaults', () => {
   const { container, review } = mount(); let pending;
   container.addEventListener('review:selection', event => { pending = event.detail; });
   try {
@@ -261,8 +261,15 @@ await check('Pending replacement, outside clicks, link suppression, and toolbar 
     const anchor = container.querySelector('.review-document a');
     const event = new MouseEvent('click', { bubbles: true, cancelable: true }); anchor.dispatchEvent(event);
     assert(event.defaultPrevented, 'Ordinary link click would navigate');
+    // A press outside the widget (e.g. a host Save button) cancels a gesture but keeps the pending range.
+    const surface = container.querySelector('.review-document');
+    surface.setPointerCapture = () => {}; surface.hasPointerCapture = () => false;
+    const rect = canonicalText(surface).range(review.export().document.text.indexOf('Next'), review.export().document.text.indexOf('Next') + 4).getClientRects()[0];
+    surface.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, button: 0, clientX: rect.left + 2, clientY: (rect.top + rect.bottom) / 2 }));
+    assert(container.querySelector('.review-swipe-preview'), 'Gesture did not start on pending text');
     document.querySelector('#summary').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 2, isPrimary: true, button: 0 }));
-    equal(pending, null); equal(review.read(), []);
+    assert(!container.querySelector('.review-swipe-preview'), 'Outside press did not cancel the gesture');
+    equal(pending.quote, 'Next 🌍 世界.', 'Outside press dropped the pending selection'); equal(review.read(), []);
     review.undo(); equal(review.read(), []);
   } finally { review.destroy(); container.remove(); }
 });

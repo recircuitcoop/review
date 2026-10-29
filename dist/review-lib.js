@@ -3266,9 +3266,10 @@ function mountReview(container, options) {
   });
   listen(document, "pointerdown", (event) => {
     if (root.contains(event.target)) return;
-    state.clear();
-    precise = false;
     pointer.cancel();
+    if (!precise) return;
+    precise = false;
+    paint();
   });
   function movePreciseCaret(event) {
     event.preventDefault();

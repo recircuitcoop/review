@@ -429,11 +429,14 @@ export function mountReview(container, options) {
     activate,
     selectBlock,
   });
+  // A press outside the widget (host controls such as Save) only cancels a gesture.
+  // Moving focus alone never removes the pending range; clicks on document text replace it.
   listen(document, 'pointerdown', event => {
     if (root.contains(event.target)) return;
-    state.clear();
-    precise = false;
     pointer.cancel();
+    if (!precise) return;
+    precise = false;
+    paint();
   });
 
   // --- Keyboard -------------------------------------------------------------
