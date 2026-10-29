@@ -91,17 +91,38 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 #downloads { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1.25rem; }
 .download-link { display: inline-block; font-size: .85rem; text-decoration: none; }
 /* Instance tokens are set by mountReview; host-page styles above stay host-owned. */
-.review { border: var(--review-border-width) solid var(--review-border); border-radius: var(--review-radius); background: var(--review-panel); color: var(--review-text); font-family: var(--review-font-family); font-size: var(--review-font-size); line-height: var(--review-line-height); box-shadow: var(--review-box-shadow); overflow: clip; }
+.review { border: var(--review-border-width) solid var(--review-border); border-radius: var(--review-radius); background: var(--review-panel); color: var(--review-text); font-family: var(--review-font-family); font-size: var(--review-font-size); line-height: var(--review-line-height); box-shadow: var(--review-box-shadow); overflow: clip; container-type: inline-size; }
 .review :focus-visible { outline: var(--review-focus-width) solid var(--review-focus); outline-offset: var(--review-focus-offset); }
 .review ::selection { color: var(--review-mark-pending-text); background: var(--review-mark-pending-bg); }
-.review button { font-family: inherit; font-size: var(--review-button-size); line-height: inherit; border: var(--review-button-border-width) solid var(--review-button-border); border-radius: var(--review-button-radius); padding: var(--review-button-padding); background: var(--review-button-bg); color: var(--review-button-text); }
+.review button { font-family: inherit; font-size: var(--review-button-size); line-height: inherit; min-height: 36px; border: var(--review-button-border-width) solid var(--review-button-border); border-radius: var(--review-button-radius); padding: var(--review-button-padding); background: var(--review-button-bg); color: var(--review-button-text); transition: background-color .12s ease, color .12s ease; }
 .review button:hover { background: var(--review-button-hover); }
-.review-toolbar { display: flex; flex-wrap: wrap; gap: var(--review-toolbar-gap); align-items: center; padding: var(--review-toolbar-padding); background: var(--review-toolbar-bg); border-bottom: var(--review-border-width) solid var(--review-border); }
-.review .review-left, .review .review-left:hover { color: var(--review-left-text); background: var(--review-left-bg); border-color: var(--review-left-border); }
-.review .review-right, .review .review-right:hover { color: var(--review-right-text); background: var(--review-right-bg); border-color: var(--review-right-border); }
-.review .review-finish { margin-left: auto; background: var(--review-primary); color: var(--review-on-primary); border-color: var(--review-primary); }
+/* Navbar: one fixed-height row. ••• swaps the title for the action strip in place; it never adds a row. */
+.review-navbar { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--review-toolbar-gap); height: var(--review-navbar-height); padding: var(--review-toolbar-padding); background: var(--review-toolbar-bg); border-bottom: var(--review-border-width) solid var(--review-border); }
+.review-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; font-size: var(--review-small-size); font-weight: 500; color: var(--review-muted); white-space: nowrap; }
+.review-title svg { flex: none; opacity: .75; }
+.review-title-text { overflow: hidden; text-overflow: ellipsis; }
+/* Narrow widths scroll the strip natively within the same row. */
+.review-actions { flex: 1; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
+.review .review-actions button { flex: none; white-space: nowrap; }
+.review .review-icon-button { display: inline-flex; align-items: center; justify-content: center; flex: none; color: var(--review-muted); }
+.review .review-more { flex: none; letter-spacing: .08em; }
+.review .review-left, .review .review-left:hover { color: var(--review-left-text); background: var(--review-left-bg); border-color: var(--review-left-border); font-weight: 500; }
+.review .review-right, .review .review-right:hover { color: var(--review-right-text); background: var(--review-right-bg); border-color: var(--review-right-border); font-weight: 500; }
+/* Done keeps the strongest emphasis and a fixed place at the end of the row. */
+.review .review-finish { flex: none; min-width: 60px; padding: 8px 14px; font-weight: 500; background: var(--review-primary); color: var(--review-on-primary); border-color: var(--review-primary); }
 .review .review-finish:hover { background: var(--review-primary-hover); }
-.review-mode { font-size: var(--review-small-size); color: var(--review-muted); margin: 0; padding: var(--review-status-padding); border-bottom: var(--review-border-width) solid var(--review-border); }
+/* Whisper: passive state row below the target passage. Generated text only, never a click target. */
+.review-whisper { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 24px; margin: -10px 0 26px; font-family: var(--review-font-family); font-size: var(--review-small-size); line-height: var(--review-line-height); color: var(--review-muted); pointer-events: none; }
+.review-whisper [data-text]::before { content: attr(data-text); }
+.review-document li > .review-whisper { margin: 2px 0 8px; }
+.review-whisper-state { text-align: center; white-space: pre; letter-spacing: -.01em; }
+.review-whisper-end { min-width: 0; overflow-wrap: anywhere; }
+.review-whisper-end[data-end="right"] { text-align: right; }
+.review-whisper-checked { font-weight: 500; text-decoration: underline; text-underline-offset: 4px; }
+.review-whisper-checked[data-end="left"], .review-whisper[data-assigned="left"] .review-whisper-status { color: var(--review-left-text); }
+.review-whisper-checked[data-end="right"], .review-whisper[data-assigned="right"] .review-whisper-status { color: var(--review-right-text); }
+.review-whisper:not([data-assigned=""]) .review-whisper-status { font-weight: 500; }
+@container (max-width: 500px) { .review-whisper { align-items: start; } .review-whisper-hint { display: none; } }
 .review-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
 .review-document { font-family: var(--review-document-font); font-size: var(--review-document-size); line-height: var(--review-document-line-height); padding: var(--review-document-padding); min-height: 25rem; overflow-wrap: anywhere; }
 .review-document :is(h1, h2, h3, h4, h5, h6) { font-family: var(--review-heading-font); letter-spacing: var(--review-heading-spacing); line-height: var(--review-heading-line-height); }
@@ -118,16 +139,22 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review .review-saved-item { text-align: left; width: 100%; font-size: var(--review-small-size); line-height: inherit; max-height: 8rem; overflow: auto; }
 .review .review-saved-item[aria-pressed=true] { border-color: var(--review-active-border); background: var(--review-active-bg); color: var(--review-active-text); }
 .review-status { font-size: var(--review-small-size); padding: var(--review-status-padding); margin: 0; background: var(--review-subtle); border-top: var(--review-border-width) solid var(--review-border); }
-.review-dialog { font: inherit; border: var(--review-border-width) solid var(--review-border); border-radius: var(--review-dialog-radius); max-width: min(42rem, 92vw); max-height: 85vh; padding: var(--review-dialog-padding); color: var(--review-text); background: var(--review-panel); box-shadow: var(--review-box-shadow); }
+.review-dialog { font: inherit; border: var(--review-border-width) solid var(--review-border); border-radius: var(--review-dialog-radius); max-width: min(42rem, 92vw); max-height: 85vh; padding: var(--review-dialog-padding); color: var(--review-text); background: var(--review-panel); box-shadow: 0 16px 60px var(--review-shadow); }
 .review-dialog::backdrop { background: var(--review-backdrop); }
-.review-dialog h2 { margin-top: 0; }
+.review-dialog h2 { margin-top: 0; font-family: var(--review-heading-font); font-size: 17px; font-weight: 500; letter-spacing: -.015em; }
 .review-choices { display: grid; gap: var(--review-toolbar-gap); margin: 1rem 0; }
 .review-choices button { text-align: left; }
-.review-shortcuts { display: grid; grid-template-columns: 1fr 2fr; gap: var(--review-toolbar-gap); font-size: var(--review-small-size); }
-.review-shortcuts dt { font-weight: 650; }
-.review-shortcuts dd { margin: 0; }
+.review-keys { width: min(426px, 80vw); margin-bottom: 1rem; }
+.review-key-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px 0; border-bottom: var(--review-border-width) solid var(--review-border); }
+.review-key-combo { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; color: var(--review-muted); }
+.review-key-chord { display: inline-flex; align-items: center; gap: 2px; }
+.review kbd { display: inline-block; min-width: 25px; padding: 3px 6px; text-align: center; font-family: var(--review-code-font); font-size: var(--review-small-size); line-height: 1.5; color: var(--review-text); background: var(--review-subtle); border: var(--review-border-width) solid var(--review-border); border-bottom-width: 2px; border-radius: 5px; }
+.review-keys details { margin-top: 16px; }
+.review-keys summary { cursor: pointer; padding: 4px 0; }
+.review-keys-note { font-size: var(--review-small-size); color: var(--review-muted); margin: 14px 0 0; }
 footer { font-size: .75rem; color: var(--review-muted); margin-top: 2rem; }
 [hidden] { display: none !important; }
+@media (pointer: coarse) { .review button { min-height: 44px; } }
 @media (max-width: 850px) { .review-layout { grid-template-columns: 1fr; } .review-saved { border-left: 0; border-top: var(--review-border-width) solid var(--review-border); } .review-document { padding: var(--review-narrow-document-padding); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
 

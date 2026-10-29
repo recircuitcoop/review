@@ -5,9 +5,16 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.review);
 });
 
+// Label, history and export buttons live in the ••• action strip, as a mouse user finds them.
+async function openActions(page) {
+  const toggle = page.getByRole('button', { name: 'Annotation actions' });
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+}
+
 test('block click, shared buttons, history, and independent overlapping annotation chooser', async ({ page }) => {
   await page.locator('.review-document p').first().click();
   expect(await page.evaluate(() => review.read())).toHaveLength(0);
+  await openActions(page);
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
   expect(await page.evaluate(() => review.read())).toHaveLength(1);
   await page.evaluate(() => { review.select(15, 45); });
@@ -28,6 +35,7 @@ test('exact native selection crosses formatting and canonical anchors survive re
     return r.toString();
   });
   await page.waitForTimeout(50);
+  await openActions(page);
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
   expect((await page.evaluate(() => review.read()))[0].quote).toBe(result);
   const before = await page.evaluate(() => review.export());
@@ -45,6 +53,7 @@ test('a mouse drag starting on pending text adjusts the native selection and nev
   const dragged = await page.evaluate(() => getSelection().toString());
   expect(dragged.length).toBeGreaterThan(0);
   // The pending range now mirrors the dragged text, not the clicked paragraph.
+  await openActions(page);
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
   expect((await page.evaluate(() => review.read()))[0].quote).toBe(dragged);
 });
@@ -66,6 +75,7 @@ test('browser-generated horizontal wheel over pending text labels once; vertical
 });
 
 test('clicks select list items and code blocks; keyboard navigation reaches both', async ({ page }) => {
+  await openActions(page);
   await page.locator('.review-document li').first().click();
   expect(await page.evaluate(() => review.read())).toHaveLength(0);
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
@@ -86,6 +96,7 @@ for (const platform of ['Win32', 'Linux x86_64', 'MacIntel']) {
       Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: undefined });
     }, platform);
     await page.goto('/tests/fixture.html'); await page.waitForFunction(() => window.review);
+    await openActions(page);
     await page.locator('.review-document li').first().click();
     await page.getByRole('button', { name: 'Accept', exact: true }).click();
     await page.locator('.review-document').focus();
@@ -145,6 +156,7 @@ test('a local Markdown file produces both downloadable label files and can resto
   await page.getByLabel('Markdown file').setInputFiles('tests/fixtures/review.md');
   await page.getByRole('button', { name: 'Start review' }).click();
   await page.locator('.review-document p').first().click();
+  await openActions(page);
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
   const downloads = [];
   page.on('download', d => downloads.push(d));
@@ -171,4 +183,38 @@ test('a local Markdown file produces both downloadable label files and can resto
   await page.getByLabel('Restore label JSON files').setInputFiles(payloads.map((payload, i) => ({ name: `label-${i}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(payload)) })));
   await expect(page.getByRole('status').first()).toContainText('Restored 1 annotations');
   await expect(page.locator('#downloads a')).toHaveCount(0);
+});
+
+test('••• swap keeps navbar and document still; real Escape collapses first; Export files, Mod+Shift+E, icon and F1 help', async ({ page }) => {
+  const navbar = page.locator('.review-navbar'), surface = page.locator('.review-document'), whisper = page.locator('.review-whisper');
+  await page.evaluate(() => { window.exports = 0; document.querySelector('#fixture').addEventListener('review:export', () => window.exports++); });
+  await page.locator('.review-document p').first().click();
+  await expect(whisper).toBeVisible();
+  const before = [await navbar.boundingBox(), await surface.boundingBox()];
+  expect(before[0].height).toBe(62);
+  await page.getByRole('button', { name: 'Annotation actions' }).click();
+  const exportButton = page.getByRole('button', { name: 'Export files', exact: true });
+  await expect(exportButton).toBeVisible();
+  expect([await navbar.boundingBox(), await surface.boundingBox()]).toEqual(before);
+  await exportButton.click();
+  // Shortcuts apply while focus is inside the annotator (WebKit does not focus clicked buttons).
+  await surface.focus();
+  await page.keyboard.press('ControlOrMeta+Shift+E');
+  expect(await page.evaluate(() => window.exports)).toBe(2);
+  await page.getByRole('button', { name: 'Annotation actions' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(exportButton).toBeHidden();
+  await expect(whisper).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(whisper).toBeHidden();
+  const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  await page.getByRole('button', { name: 'Shortcut help' }).click();
+  await expect(dialog).toBeVisible();
+  const viaIcon = await dialog.textContent();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await surface.focus();
+  await page.keyboard.press('F1');
+  await expect(dialog).toBeVisible();
+  expect(await dialog.textContent()).toBe(viaIcon);
 });

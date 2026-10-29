@@ -301,6 +301,7 @@ var tokens = {
   focusOffset: ["--review-focus-offset", "outline-offset", "3px"],
   documentPadding: ["--review-document-padding", "padding", "36px 38px 26px"],
   narrowDocumentPadding: ["--review-narrow-document-padding", "padding", "28px 22px 24px"],
+  navbarHeight: ["--review-navbar-height", "height", "62px"],
   toolbarPadding: ["--review-toolbar-padding", "padding", "9px 18px"],
   toolbarGap: ["--review-toolbar-gap", "gap", "8px"],
   buttonPadding: ["--review-button-padding", "padding", "7px 9px"],
@@ -2698,6 +2699,73 @@ function paintHighlights({ names, text: text2, labels, annotations, pending, act
   const activeRanges = active ? [text2.range(active.start, active.end)] : [];
   CSS.highlights.set(names.active, new Highlight(...activeRanges));
 }
+var ICONS = {
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  keyboard: '<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>'
+};
+function icon(name) {
+  const holder = document.createElement("span");
+  holder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`;
+  return holder.firstChild;
+}
+function placeWhisper(whisper, surface, anchor) {
+  const block = anchor ? selectableBlock(anchor) : null;
+  if (!block || !surface.contains(block)) {
+    if (whisper.parentNode !== surface) surface.append(whisper);
+    return;
+  }
+  if (block.tagName === "LI") {
+    if (block.lastChild !== whisper) block.append(whisper);
+    return;
+  }
+  if (block.nextSibling !== whisper) block.after(whisper);
+}
+function paintWhisper({ whisper, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded }) {
+  const assigned = annotations.find((a) => a.id === assignedId);
+  let state = null;
+  let target = null;
+  if (precise) {
+    state = "precise";
+    target = pending;
+  } else if (pending) {
+    state = "pending";
+    target = pending;
+  } else if (active) {
+    state = "active";
+    target = active;
+  } else if (assigned) {
+    state = "assigned";
+    target = assigned;
+  }
+  whisper.hidden = state === null;
+  if (!state) return;
+  const end = target ? text2.range(target.start, target.end).endContainer : focusedBlock;
+  placeWhisper(whisper, surface, end?.nodeType === Node.TEXT_NODE ? end.parentElement : end);
+  const checked = state === "active" || state === "assigned" ? labels.find((l) => l.id === target.labelId) : null;
+  whisper.dataset.state = state;
+  whisper.dataset.assigned = checked?.direction ?? "";
+  for (const label of labels) {
+    const node = whisper.querySelector(`[data-end="${label.direction}"]`);
+    const name = checked === label ? `\u2713 ${label.name}` : label.name;
+    node.dataset.text = label.direction === "left" ? `\u2190 ${name}` : `${name} \u2192`;
+    node.classList.toggle("review-whisper-checked", checked === label);
+  }
+  const status = whisper.querySelector(".review-whisper-status");
+  const hint = whisper.querySelector(".review-whisper-hint");
+  if (state === "precise") {
+    status.dataset.text = "Selecting text";
+    hint.dataset.text = "";
+  } else if (state === "pending") {
+    status.dataset.text = "Unlabeled";
+    hint.dataset.text = expanded ? " \xB7 choose above" : " \xB7 scroll \u2190 \u2192 over selection";
+  } else if (state === "active") {
+    status.dataset.text = `\u2713 ${checked.name}`;
+    hint.dataset.text = " \xB7 \u2022\u2022\u2022 to edit";
+  } else {
+    status.dataset.text = `\u2713 ${checked.name} \xB7 ${undoKeys} undo`;
+    hint.dataset.text = "";
+  }
+}
 function renderSavedList({ list, count, labels, annotations, activeId }) {
   count.textContent = `Annotations (${annotations.length})`;
   list.replaceChildren();
@@ -2724,7 +2792,7 @@ function moveFocusWithArrows(modal, event) {
 }
 function createDialogs(root, idPrefix, isDestroyed) {
   let current = null;
-  function open(title, content) {
+  function open(title, content, dismissLabel = "Cancel") {
     if (current) return null;
     const previousFocus = document.activeElement;
     const modal = element("dialog", "review-dialog");
@@ -2732,7 +2800,7 @@ function createDialogs(root, idPrefix, isDestroyed) {
     heading.id = `${idPrefix}-dialog-title`;
     modal.setAttribute("aria-labelledby", heading.id);
     modal.append(heading, content);
-    const dismiss = element("button", "", "Cancel");
+    const dismiss = element("button", "", dismissLabel);
     dismiss.type = "button";
     dismiss.addEventListener("click", () => modal.close("cancel"));
     modal.append(dismiss);
@@ -2772,14 +2840,56 @@ function choiceList(choices) {
   }
   return content;
 }
-function shortcutHelp(display) {
-  const content = element("dl", "review-shortcuts");
-  for (const [command, keys] of Object.entries(display)) {
-    content.append(element("dt", "", command), element("dd", "", keys.join(" / ")));
-  }
+var KEY_NAMES = { arrowleft: "\u2190", arrowright: "\u2192", arrowup: "\u2191", arrowdown: "\u2193", escape: "Esc" };
+function keycaps(chord) {
+  const caps = element("span", "review-key-chord");
+  chord.split("+").forEach((part, index) => {
+    if (index > 0) caps.append("+");
+    caps.append(element("kbd", "", KEY_NAMES[part.toLowerCase()] ?? part));
+  });
+  return caps;
+}
+function keyRow(label, chords) {
+  const combo = element("span", "review-key-combo");
+  chords.forEach((chord, index) => {
+    if (index > 0) combo.append(" / ");
+    combo.append(keycaps(chord));
+  });
+  const row = element("div", "review-key-row");
+  row.append(element("span", "", label), combo);
+  return row;
+}
+function shortcutHelp({ display, mac, left, right }) {
+  const content = element("div", "review-keys");
   content.append(
-    element("dt", "", "Native selection"),
-    element("dd", "", "Tab / Shift+Tab: normal focus. In F2 mode: arrows move; Shift+arrows select; Ctrl+Shift+Left/Right (Windows/Linux) or Alt+Shift+Left/Right (macOS) extends by word.")
+    keyRow(`Label ${left.name}`, display.left),
+    keyRow(`Label ${right.name}`, display.right),
+    keyRow("Clear selection / close", display.clear),
+    keyRow("Delete annotation", display.remove),
+    keyRow("Undo", display.undo),
+    keyRow("Redo", display.redo),
+    keyRow("Export files", display.export),
+    keyRow("Done", display.finish)
+  );
+  const details = element("details");
+  details.append(
+    element("summary", "", "Selection & navigation"),
+    keyRow("Next block", display.nextBlock),
+    keyRow("Previous block", display.previousBlock),
+    keyRow("Select focused block", display.selectBlock),
+    keyRow("Precise selection", display.precise),
+    keyRow("Extend exact selection (precise mode)", ["Shift+ArrowLeft", "Shift+ArrowRight"]),
+    // Native word steps: Alt on macOS, Ctrl elsewhere (matches movePreciseCaret).
+    keyRow("Extend selection by word", [mac ? "Alt+Shift+ArrowLeft" : "Ctrl+Shift+ArrowLeft", mac ? "Alt+Shift+ArrowRight" : "Ctrl+Shift+ArrowRight"]),
+    keyRow("Next annotation", display.nextAnnotation),
+    keyRow("Previous annotation", display.previousAnnotation),
+    keyRow("Choose overlapping annotation", ["ArrowUp", "ArrowDown", "Enter"]),
+    keyRow("Move between controls", ["Tab", "Shift+Tab"]),
+    keyRow("Show this help", display.help)
+  );
+  content.append(
+    details,
+    element("p", "review-keys-note", "Scroll left or right over selected text to label it. Escape closes this popup first; your selection stays. Undo reverses the latest annotation change and clears pending text.")
   );
   return content;
 }
@@ -2854,7 +2964,7 @@ function installPointerInput(ctx) {
 }
 
 // src/review.js
-var TOOLBAR = [
+var ACTIONS = [
   ["left", null],
   ["right", null],
   ["clear", "Clear selection"],
@@ -2867,17 +2977,15 @@ var TOOLBAR = [
   ["precise", "Precise selection"],
   ["previousAnnotation", "Previous annotation"],
   ["nextAnnotation", "Next annotation"],
-  ["export", "Export files"],
-  ["finish", "Done"],
-  ["help", "Shortcut help"]
+  ["export", "Export files"]
 ];
 var ARROW_KEYS = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
-var READ_ONLY_MODE = "Read-only \xB7 F2 for precise keyboard selection";
-var PRECISE_MODE = "Precise selection \xB7 arrows move \xB7 Shift+arrows select \xB7 F2 keeps range \xB7 Escape cancels";
+var PRECISE_MODE = "Precise selection: arrows move, Shift+arrows select, F2 keeps the range, Escape cancels.";
 function checkMountInput(container, options) {
   if (!(container instanceof HTMLElement)) throw new Error("Mount needs an HTML container.");
   validateOptions(options);
   if (typeof options.document.markdown !== "string") throw new Error("Markdown source must be a string.");
+  if (options.document.title !== void 0 && typeof options.document.title !== "string") throw new Error("Document title must be a string when given.");
   if (!globalThis.CSS?.highlights || !globalThis.Highlight || !getSelection()?.modify) {
     throw new Error("This browser needs CSS Custom Highlight and Selection.modify support. Use a current desktop browser.");
   }
@@ -2891,9 +2999,25 @@ function mountReview(container, options) {
   const root = element("section", "review");
   root.setAttribute("aria-label", "Document annotator");
   applyReviewStyles(root, options.styles);
-  const toolbar = element("div", "review-toolbar");
-  toolbar.setAttribute("role", "group");
-  toolbar.setAttribute("aria-label", "Annotation controls");
+  const token = `review-${crypto.randomUUID()}`;
+  const navbar = element("header", "review-navbar");
+  const title = element("span", "review-title");
+  title.append(icon("file"), element("span", "review-title-text", options.document.title?.trim() || options.document.id));
+  const actions = element("div", "review-actions");
+  actions.id = `${token}-actions`;
+  actions.hidden = true;
+  actions.setAttribute("role", "group");
+  actions.setAttribute("aria-label", "Annotation controls");
+  const helpButton = element("button", "review-command review-help review-icon-button");
+  helpButton.append(icon("keyboard"));
+  const more = element("button", "review-more", "\u2022\u2022\u2022");
+  more.type = "button";
+  more.title = "Annotation actions";
+  more.setAttribute("aria-label", "Annotation actions");
+  more.setAttribute("aria-controls", actions.id);
+  more.setAttribute("aria-expanded", "false");
+  const done = element("button", "review-command review-finish", "Done");
+  navbar.append(title, actions, helpButton, more, done);
   const surface = element("article", "review-document");
   surface.tabIndex = 0;
   surface.setAttribute("aria-label", "Read-only document");
@@ -2907,10 +3031,18 @@ function mountReview(container, options) {
   const status = element("p", "review-status", "Click a paragraph, heading, list item, or code block; or drag an exact range. Then hover it and scroll left or right, or choose a label.");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  const mode = element("p", "review-mode", READ_ONLY_MODE);
   layout.append(surface, sidebar);
-  root.append(toolbar, mode, layout, status);
-  const token = `review-${crypto.randomUUID()}`;
+  root.append(navbar, layout, status);
+  const whisper = element("div", "review-whisper");
+  whisper.hidden = true;
+  const whisperState = element("span", "review-whisper-state");
+  whisperState.append(element("span", "review-whisper-status"), element("span", "review-whisper-hint"));
+  const whisperLeft = element("span", "review-whisper-end");
+  whisperLeft.dataset.end = "left";
+  const whisperRight = element("span", "review-whisper-end");
+  whisperRight.dataset.end = "right";
+  whisper.append(whisperLeft, whisperState, whisperRight);
+  surface.append(whisper);
   const names = highlightNames(token);
   const style = element("style");
   style.textContent = highlightStyle(names);
@@ -2923,7 +3055,10 @@ function mountReview(container, options) {
   let finishPromise = null;
   let focusedBlock = null;
   let initialized = false;
+  let expanded = false;
+  let assignedId = null;
   const state = new ReviewSession({ ...options, text: text2.text }, (name, detail) => {
+    if (name === "selection") assignedId = null;
     container.dispatchEvent(new CustomEvent(`review:${name}`, { detail }));
     if (initialized) paint();
   });
@@ -2964,7 +3099,7 @@ function mountReview(container, options) {
     const active = annotations.find((a) => a.id === state.activeId);
     paintHighlights({ names, text: text2, labels, annotations, pending, active });
     renderSavedList({ list, count, labels, annotations, activeId: state.activeId });
-    mode.textContent = precise ? PRECISE_MODE : READ_ONLY_MODE;
+    paintWhisper({ whisper, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded });
     if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
     else if (active) announce(`Editing ${labelName(active.labelId)}: ${active.quote.slice(0, 100)}`);
   }
@@ -2991,6 +3126,7 @@ function mountReview(container, options) {
     const saved = state.classify(label.id);
     if (!saved) return false;
     precise = false;
+    if (saved.id !== state.activeId) assignedId = saved.id;
     resetNative();
     paint();
     announce(`${label.name} assigned. ${state.read().length} saved annotations.`);
@@ -3061,6 +3197,7 @@ function mountReview(container, options) {
     selection.removeAllRanges();
     selection.addRange(range);
     paint();
+    announce(PRECISE_MODE);
     return true;
   }
   function chooseOverlap(annotations) {
@@ -3074,12 +3211,12 @@ function mountReview(container, options) {
     dialogs.open("Choose an annotation", choiceList(choices));
   }
   function showHelp() {
-    dialogs.open("Keyboard shortcuts", shortcutHelp(shortcuts.display));
+    dialogs.open("Keyboard shortcuts", shortcutHelp({ display: shortcuts.display, mac: shortcuts.mac, left, right }), "Close");
     return true;
   }
   async function resolvePending() {
-    const choices = [["left", left.name], ["right", right.name], ["discard", "Discard pending selection"]].map(([value, title]) => ({
-      title,
+    const choices = [["left", left.name], ["right", right.name], ["discard", "Discard pending selection"]].map(([value, title2]) => ({
+      title: title2,
       onChoose: () => dialogs.close(value)
     }));
     const modal = dialogs.open("Resolve pending selection", choiceList(choices));
@@ -3187,16 +3324,34 @@ function mountReview(container, options) {
     if (!Object.hasOwn(commands, name)) return false;
     return commands[name]();
   }
-  for (const [name, fixedTitle] of TOOLBAR) {
-    const title = fixedTitle ?? (name === "left" ? left.name : right.name);
-    const button = element("button", `review-command review-${name}`, title);
+  function bindCommand(button, name, label) {
     button.type = "button";
     button.dataset.command = name;
-    button.title = `${title} (${shortcuts.display[name].join(" / ")})`;
+    button.title = `${label} (${shortcuts.display[name].join(" / ")})`;
     button.setAttribute("aria-keyshortcuts", shortcuts.aria[name]);
-    toolbar.append(button);
   }
-  listen(toolbar, "click", (event) => {
+  for (const [name, fixedTitle] of ACTIONS) {
+    const button = element("button", `review-command review-${name}`, fixedTitle ?? void 0);
+    if (name === "left") button.append(element("span", "", "\u2190 "), left.name);
+    if (name === "right") button.append(right.name, element("span", "", " \u2192"));
+    for (const arrow of button.querySelectorAll("span")) arrow.setAttribute("aria-hidden", "true");
+    bindCommand(button, name, fixedTitle ?? (name === "left" ? left.name : right.name));
+    actions.append(button);
+  }
+  bindCommand(helpButton, "help", "Shortcut help");
+  helpButton.setAttribute("aria-label", "Shortcut help");
+  helpButton.setAttribute("aria-haspopup", "dialog");
+  bindCommand(done, "finish", "Done");
+  function setExpanded(value) {
+    expanded = value;
+    if (!value && actions.contains(document.activeElement)) more.focus();
+    actions.hidden = !value;
+    title.hidden = value;
+    more.setAttribute("aria-expanded", String(value));
+    paint();
+  }
+  listen(more, "click", () => safe(() => setExpanded(!expanded)));
+  listen(navbar, "click", (event) => {
     const button = event.target.closest("[data-command]");
     if (button) safe(() => command(button.dataset.command));
   });
@@ -3264,6 +3419,11 @@ function mountReview(container, options) {
   listen(root, "keydown", (event) => {
     if (event.isComposing || event.target.isContentEditable || event.target.closest("input,textarea,select")) return;
     if (dialogs.isOpen) return;
+    if (expanded && event.key === "Escape") {
+      setExpanded(false);
+      event.preventDefault();
+      return;
+    }
     if (precise && surface.contains(event.target) && ARROW_KEYS.includes(event.key)) {
       movePreciseCaret(event);
       return;

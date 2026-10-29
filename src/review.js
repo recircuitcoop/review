@@ -2,13 +2,14 @@ import { ReviewSession, validateOptions } from './model.js';
 import { canonicalText } from './text.js';
 import { applyReviewStyles } from './styles.js';
 import { shortcutMap } from './shortcuts.js';
-import { BLOCK_SELECTOR, element, highlightNames, highlightStyle, paintHighlights, renderMarkdown, renderSavedList, selectableBlock } from './render.js';
+import { BLOCK_SELECTOR, element, highlightNames, highlightStyle, icon, paintHighlights, paintWhisper, renderMarkdown, renderSavedList, selectableBlock } from './render.js';
 import { choiceList, createDialogs, shortcutHelp } from './dialogs.js';
 import { installPointerInput } from './pointer.js';
 export { defaultReviewStyles } from './styles.js';
 
-// Toolbar order; each button dispatches the same command as its shortcut.
-const TOOLBAR = [
+// Action strip order (swapped in through •••); each button dispatches the same command as its shortcut.
+// Label buttons take the configured names; help and Done stay fixed in the navbar.
+const ACTIONS = [
   ['left', null],
   ['right', null],
   ['clear', 'Clear selection'],
@@ -22,17 +23,15 @@ const TOOLBAR = [
   ['previousAnnotation', 'Previous annotation'],
   ['nextAnnotation', 'Next annotation'],
   ['export', 'Export files'],
-  ['finish', 'Done'],
-  ['help', 'Shortcut help'],
 ];
 const ARROW_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
-const READ_ONLY_MODE = 'Read-only · F2 for precise keyboard selection';
-const PRECISE_MODE = 'Precise selection · arrows move · Shift+arrows select · F2 keeps range · Escape cancels';
+const PRECISE_MODE = 'Precise selection: arrows move, Shift+arrows select, F2 keeps the range, Escape cancels.';
 
 function checkMountInput(container, options) {
   if (!(container instanceof HTMLElement)) throw new Error('Mount needs an HTML container.');
   validateOptions(options);
   if (typeof options.document.markdown !== 'string') throw new Error('Markdown source must be a string.');
+  if (options.document.title !== undefined && typeof options.document.title !== 'string') throw new Error('Document title must be a string when given.');
   if (!globalThis.CSS?.highlights || !globalThis.Highlight || !getSelection()?.modify) {
     throw new Error('This browser needs CSS Custom Highlight and Selection.modify support. Use a current desktop browser.');
   }
@@ -51,9 +50,26 @@ export function mountReview(container, options) {
   const root = element('section', 'review');
   root.setAttribute('aria-label', 'Document annotator');
   applyReviewStyles(root, options.styles);
-  const toolbar = element('div', 'review-toolbar');
-  toolbar.setAttribute('role', 'group');
-  toolbar.setAttribute('aria-label', 'Annotation controls');
+  const token = `review-${crypto.randomUUID()}`;
+  // Fixed-height navbar: document name (or action strip), keyboard help, •••, Done.
+  const navbar = element('header', 'review-navbar');
+  const title = element('span', 'review-title');
+  title.append(icon('file'), element('span', 'review-title-text', options.document.title?.trim() || options.document.id));
+  const actions = element('div', 'review-actions');
+  actions.id = `${token}-actions`;
+  actions.hidden = true;
+  actions.setAttribute('role', 'group');
+  actions.setAttribute('aria-label', 'Annotation controls');
+  const helpButton = element('button', 'review-command review-help review-icon-button');
+  helpButton.append(icon('keyboard'));
+  const more = element('button', 'review-more', '•••');
+  more.type = 'button';
+  more.title = 'Annotation actions';
+  more.setAttribute('aria-label', 'Annotation actions');
+  more.setAttribute('aria-controls', actions.id);
+  more.setAttribute('aria-expanded', 'false');
+  const done = element('button', 'review-command review-finish', 'Done');
+  navbar.append(title, actions, helpButton, more, done);
   const surface = element('article', 'review-document');
   surface.tabIndex = 0;
   surface.setAttribute('aria-label', 'Read-only document');
@@ -67,10 +83,21 @@ export function mountReview(container, options) {
   const status = element('p', 'review-status', 'Click a paragraph, heading, list item, or code block; or drag an exact range. Then hover it and scroll left or right, or choose a label.');
   status.setAttribute('role', 'status');
   status.setAttribute('aria-live', 'polite');
-  const mode = element('p', 'review-mode', READ_ONLY_MODE);
   layout.append(surface, sidebar);
-  root.append(toolbar, mode, layout, status);
-  const token = `review-${crypto.randomUUID()}`;
+  root.append(navbar, layout, status);
+  // Placed inside the document below the target passage. Its words are CSS generated
+  // content (data-text), so it adds no text nodes: canonical text, native selection and
+  // caret movement pass straight over it.
+  const whisper = element('div', 'review-whisper');
+  whisper.hidden = true;
+  const whisperState = element('span', 'review-whisper-state');
+  whisperState.append(element('span', 'review-whisper-status'), element('span', 'review-whisper-hint'));
+  const whisperLeft = element('span', 'review-whisper-end');
+  whisperLeft.dataset.end = 'left';
+  const whisperRight = element('span', 'review-whisper-end');
+  whisperRight.dataset.end = 'right';
+  whisper.append(whisperLeft, whisperState, whisperRight);
+  surface.append(whisper);
   const names = highlightNames(token);
   const style = element('style');
   style.textContent = highlightStyle(names);
@@ -86,7 +113,13 @@ export function mountReview(container, options) {
   let finishPromise = null;
   let focusedBlock = null;
   let initialized = false;
+  // Presentation only: whether the ••• strip is open, and the annotation just labeled
+  // (for the `✓ label · undo` whisper). Neither is committed state.
+  let expanded = false;
+  let assignedId = null;
   const state = new ReviewSession({ ...options, text: text.text }, (name, detail) => {
+    // Any selection change (select, clear, activate, undo/redo, restore) is the next deliberate transition.
+    if (name === 'selection') assignedId = null;
     container.dispatchEvent(new CustomEvent(`review:${name}`, { detail }));
     // The constructor emits nothing, but paint() needs everything below to exist.
     if (initialized) paint();
@@ -132,7 +165,7 @@ export function mountReview(container, options) {
     const active = annotations.find(a => a.id === state.activeId);
     paintHighlights({ names, text, labels, annotations, pending, active });
     renderSavedList({ list, count, labels, annotations, activeId: state.activeId });
-    mode.textContent = precise ? PRECISE_MODE : READ_ONLY_MODE;
+    paintWhisper({ whisper, surface, text, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded });
     if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
     else if (active) announce(`Editing ${labelName(active.labelId)}: ${active.quote.slice(0, 100)}`);
   }
@@ -166,6 +199,8 @@ export function mountReview(container, options) {
     const saved = state.classify(label.id);
     if (!saved) return false;
     precise = false;
+    // A new pending range was committed: confirm it below the passage until the next transition.
+    if (saved.id !== state.activeId) assignedId = saved.id;
     resetNative();
     paint();
     announce(`${label.name} assigned. ${state.read().length} saved annotations.`);
@@ -240,6 +275,7 @@ export function mountReview(container, options) {
     selection.removeAllRanges();
     selection.addRange(range);
     paint();
+    announce(PRECISE_MODE);
     return true;
   }
   function chooseOverlap(annotations) {
@@ -253,7 +289,7 @@ export function mountReview(container, options) {
     dialogs.open('Choose an annotation', choiceList(choices));
   }
   function showHelp() {
-    dialogs.open('Keyboard shortcuts', shortcutHelp(shortcuts.display));
+    dialogs.open('Keyboard shortcuts', shortcutHelp({ display: shortcuts.display, mac: shortcuts.mac, left, right }), 'Close');
     return true;
   }
 
@@ -376,17 +412,40 @@ export function mountReview(container, options) {
     return commands[name]();
   }
 
-  // --- Toolbar and sidebar --------------------------------------------------
-  for (const [name, fixedTitle] of TOOLBAR) {
-    const title = fixedTitle ?? (name === 'left' ? left.name : right.name);
-    const button = element('button', `review-command review-${name}`, title);
+  // --- Navbar, action strip and sidebar ---------------------------------------
+  /** Shortcut hints come from the effective mapping, so remapped keys show everywhere. */
+  function bindCommand(button, name, label) {
     button.type = 'button';
     button.dataset.command = name;
-    button.title = `${title} (${shortcuts.display[name].join(' / ')})`;
+    button.title = `${label} (${shortcuts.display[name].join(' / ')})`;
     button.setAttribute('aria-keyshortcuts', shortcuts.aria[name]);
-    toolbar.append(button);
   }
-  listen(toolbar, 'click', event => {
+  for (const [name, fixedTitle] of ACTIONS) {
+    const button = element('button', `review-command review-${name}`, fixedTitle ?? undefined);
+    if (name === 'left') button.append(element('span', '', '← '), left.name);
+    if (name === 'right') button.append(right.name, element('span', '', ' →'));
+    // Direction arrows are decoration; the accessible name stays the configured label.
+    for (const arrow of button.querySelectorAll('span')) arrow.setAttribute('aria-hidden', 'true');
+    bindCommand(button, name, fixedTitle ?? (name === 'left' ? left.name : right.name));
+    actions.append(button);
+  }
+  bindCommand(helpButton, 'help', 'Shortcut help');
+  helpButton.setAttribute('aria-label', 'Shortcut help');
+  helpButton.setAttribute('aria-haspopup', 'dialog');
+  bindCommand(done, 'finish', 'Done');
+
+  /** ••• swaps the document name for the action strip in the same row. Never touches the review target. */
+  function setExpanded(value) {
+    expanded = value;
+    // Collapsing would hide a focused command; keep focus on the toggle instead.
+    if (!value && actions.contains(document.activeElement)) more.focus();
+    actions.hidden = !value;
+    title.hidden = value;
+    more.setAttribute('aria-expanded', String(value));
+    paint();
+  }
+  listen(more, 'click', () => safe(() => setExpanded(!expanded)));
+  listen(navbar, 'click', event => {
     const button = event.target.closest('[data-command]');
     if (button) safe(() => command(button.dataset.command));
   });
@@ -465,6 +524,12 @@ export function mountReview(container, options) {
     // Editable fields, IME composition and open dialogs keep their own keys.
     if (event.isComposing || event.target.isContentEditable || event.target.closest('input,textarea,select')) return;
     if (dialogs.isOpen) return;
+    // Like a menu, the first Escape closes the open strip and keeps the target.
+    if (expanded && event.key === 'Escape') {
+      setExpanded(false);
+      event.preventDefault();
+      return;
+    }
     if (precise && surface.contains(event.target) && ARROW_KEYS.includes(event.key)) {
       movePreciseCaret(event);
       return;

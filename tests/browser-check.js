@@ -274,7 +274,7 @@ await check('Every toolbar command and keyboard dispatcher path uses the shared 
   container.addEventListener('review:export', () => exports++);
   container.addEventListener('review:complete', () => completions++);
   try {
-    const expected = ['left', 'right', 'clear', 'remove', 'undo', 'redo', 'previousBlock', 'nextBlock', 'selectBlock', 'precise', 'previousAnnotation', 'nextAnnotation', 'export', 'finish', 'help'];
+    const expected = ['left', 'right', 'clear', 'remove', 'undo', 'redo', 'previousBlock', 'nextBlock', 'selectBlock', 'precise', 'previousAnnotation', 'nextAnnotation', 'export', 'help', 'finish'];
     equal([...container.querySelectorAll('[data-command]')].map(button => button.dataset.command), expected);
     const mod = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
     surface.focus(); key(surface, 'ArrowDown', { altKey: true }); equal(document.activeElement.tagName, 'H1');
@@ -502,12 +502,128 @@ await check('Public undo and redo leave precise mode and repaint like the keyboa
   const { container, review } = mount();
   try {
     review.select(3, 10); click(container, 'left');
-    const p = container.querySelector('.review-document p'); const mode = container.querySelector('.review-mode');
-    p.focus(); key(p, 'F2'); assert(mode.textContent.startsWith('Precise'), 'F2 did not enter precise mode');
-    equal(review.undo(), true); assert(mode.textContent.startsWith('Read-only'), 'Public undo stayed in precise mode');
+    const p = container.querySelector('.review-document p'); const whisper = container.querySelector('.review-whisper');
+    const precise = () => !whisper.hidden && whisper.dataset.state === 'precise';
+    p.focus(); key(p, 'F2'); assert(precise(), 'F2 did not enter precise mode');
+    equal(review.undo(), true); assert(!precise(), 'Public undo stayed in precise mode');
     assert(key(p, 'ArrowRight', { shiftKey: true }), 'Arrow keys still drive the precise caret after undo');
-    p.focus(); key(p, 'F2'); equal(review.redo(), true); assert(mode.textContent.startsWith('Read-only'), 'Public redo stayed in precise mode');
+    p.focus(); key(p, 'F2'); equal(review.redo(), true); assert(!precise(), 'Public redo stayed in precise mode');
     equal(review.read().length, 1); equal(review.redo(), false);
+  } finally { review.destroy(); container.remove(); }
+});
+
+// Widget UI (plan 23 / 25 slice 4).
+const platformMod = () => /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+const undoHint = () => /Mac/.test(navigator.platform) ? 'Cmd+Z' : 'Ctrl+Z';
+const closeDialog = async dialog => {
+  const closed = new Promise(resolve => dialog.addEventListener('close', resolve, { once: true }));
+  dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+  await closed;
+};
+
+await check('Navbar names the document by optional title with ID fallback; a non-string title is rejected', () => {
+  const titled = mount({ document: { ...options.document, title: 'Project notes' } });
+  const plain = mount();
+  try {
+    equal(titled.container.querySelector('.review-title').textContent.trim(), 'Project notes');
+    equal(plain.container.querySelector('.review-title').textContent.trim(), 'check.md');
+  } finally { titled.review.destroy(); plain.review.destroy(); titled.container.remove(); plain.container.remove(); }
+  const host = document.createElement('div'); host.textContent = 'host'; document.querySelector('#fixtures').append(host);
+  let rejected = false; try { mountReview(host, { ...options, document: { ...options.document, title: 42 } }); } catch { rejected = true; }
+  assert(rejected, 'Non-string title accepted'); equal(host.textContent, 'host'); host.remove();
+});
+
+await check('••• swaps title and action strip in one fixed-height row without moving the document or the target', () => {
+  const { container, review } = mount(); let events = 0, exports = 0;
+  try {
+    const navbar = container.querySelector('.review-navbar'), surface = container.querySelector('.review-document');
+    const toggle = container.querySelector('.review-more'), strip = container.querySelector('.review-actions'), title = container.querySelector('.review-title');
+    review.select(3, 10);
+    container.addEventListener('review:selection', () => events++);
+    container.addEventListener('review:export', () => exports++);
+    const height = navbar.getBoundingClientRect().height, top = surface.getBoundingClientRect().top;
+    equal(height, 62, 'Navbar height');
+    equal(toggle.getAttribute('aria-expanded'), 'false'); assert(strip.hidden && !title.hidden, 'Strip should start collapsed');
+    toggle.click();
+    equal(toggle.getAttribute('aria-expanded'), 'true'); assert(!strip.hidden && title.hidden, 'Toggle did not swap in the strip');
+    equal(navbar.getBoundingClientRect().height, height, 'Navbar height changed'); equal(surface.getBoundingClientRect().top, top, 'Document moved');
+    equal([...strip.querySelectorAll('[data-command]')].map(b => b.dataset.command), ['left', 'right', 'clear', 'remove', 'undo', 'redo', 'previousBlock', 'nextBlock', 'selectBlock', 'precise', 'previousAnnotation', 'nextAnnotation', 'export']);
+    const labelNames = [...strip.querySelectorAll('[data-command="left"],[data-command="right"]')].map(b => b.textContent);
+    assert(labelNames[0].includes('Accept') && labelNames[1].includes('Reject'), `Label buttons lack configured names: ${labelNames}`);
+    const exportButton = strip.querySelector('[data-command="export"]'); equal(exportButton.textContent, 'Export files');
+    exportButton.click(); equal(exports, 1, 'Export files control');
+    key(surface, 'e', { ...platformMod(), shiftKey: true }); equal(exports, 2, 'Mod+Shift+E');
+    toggle.click(); assert(strip.hidden && !title.hidden, 'Toggle did not restore the title');
+    equal(navbar.getBoundingClientRect().height, height); equal(surface.getBoundingClientRect().top, top);
+    equal(events, 0, 'Toggling changed the selection'); equal(review.read(), []);
+  } finally { review.destroy(); container.remove(); }
+});
+
+await check('First Escape collapses an open strip and keeps the target; the next Escape clears it', () => {
+  const { container, review } = mount(); let selection;
+  container.addEventListener('review:selection', event => { selection = event.detail; });
+  try {
+    review.select(3, 10); const toggle = container.querySelector('.review-more');
+    toggle.click(); const left = container.querySelector('.review-actions [data-command="left"]'); left.focus();
+    assert(!key(left, 'Escape'), 'Escape that collapsed the strip was not handled');
+    equal(toggle.getAttribute('aria-expanded'), 'false'); assert(document.activeElement === toggle, 'Focus did not return to •••');
+    equal(selection?.quote, 'One two', 'Collapsing cleared the target');
+    key(toggle, 'Escape'); equal(selection, null, 'Second Escape did not clear');
+  } finally { review.destroy(); container.remove(); }
+});
+
+await check('Keyboard icon and F1 open the same keycap help with actual labels; closing keeps the target and focus', async () => {
+  const { container, review } = mount({ labels: [{ id: 'left', name: 'Evidence', direction: 'left' }, { id: 'right', name: 'Question', direction: 'right' }] });
+  let selection;
+  container.addEventListener('review:selection', event => { selection = event.detail; });
+  try {
+    review.select(3, 10); const surface = container.querySelector('.review-document');
+    const icon = container.querySelector('.review-navbar [data-command="help"]');
+    assert(icon && !icon.closest('.review-actions'), 'Keyboard icon is not in the navbar');
+    icon.focus(); icon.click();
+    const help = container.querySelector('dialog'); assert(help?.open, 'Keyboard icon did not open help');
+    const content = help.textContent;
+    for (const expected of ['Label Evidence', 'Label Question', 'Export files', undoHint()]) assert(content.includes(expected), `Help lacks ${expected}`);
+    assert(help.querySelectorAll('kbd').length > 10, 'Help has no keycaps');
+    assert(help.querySelector('details summary')?.textContent.includes('Selection'), 'Selection commands not in an expandable section');
+    assert(help.querySelector('details').textContent.includes('Precise selection'), 'Precise selection missing from expandable section');
+    await closeDialog(help);
+    assert(document.activeElement === icon, 'Focus did not return to the keyboard icon'); equal(selection?.quote, 'One two', 'Help cleared the target');
+    surface.focus(); key(surface, 'F1');
+    const again = container.querySelector('dialog'); assert(again?.open, 'F1 did not open help');
+    equal(again.textContent, content, 'F1 and the icon open different help');
+    await closeDialog(again); assert(document.activeElement === surface, 'Focus did not return to the document'); equal(selection?.quote, 'One two');
+  } finally { review.destroy(); container.remove(); }
+});
+
+await check('Whisper is absent when idle, after clear and after undo; shows pending, precise, assigned and active copy', () => {
+  const { container, review } = mount();
+  try {
+    const whisper = container.querySelector('.review-whisper'), surface = container.querySelector('.review-document');
+    // Whisper words are generated content (data-text), so they never become document text.
+    const centre = () => [...whisper.querySelectorAll('.review-whisper-state [data-text]')].map(part => part.dataset.text).join('');
+    const ends = () => [...whisper.querySelectorAll('.review-whisper-end')].map(end => end.dataset.text);
+    equal(whisper.textContent, '', 'Whisper owns text nodes');
+    const shown = () => !whisper.hidden && whisper.isConnected;
+    assert(!shown(), 'Whisper visible while idle');
+    assert(!whisper.closest('[aria-live]') && !whisper.hasAttribute('aria-live'), 'Whisper would double-announce');
+    review.select(3, 10);
+    assert(shown(), 'No whisper for pending text'); equal(whisper.dataset.state, 'pending');
+    equal(ends(), ['← Accept', 'Reject →']); assert(centre().startsWith('Unlabeled'), `Pending copy: ${centre()}`);
+    assert(whisper.previousElementSibling === surface.querySelector('p'), 'Whisper is not below the passage');
+    equal(canonicalText(surface).text, review.export().document.text, 'Whisper entered canonical text');
+    click(container, 'clear'); assert(!shown(), 'Whisper remained after clear');
+    review.select(3, 10); click(container, 'left');
+    assert(shown(), 'No just-assigned confirmation'); equal(whisper.dataset.state, 'assigned');
+    equal(centre(), `✓ Accept · ${undoHint()} undo`); equal(ends(), ['← ✓ Accept', 'Reject →']);
+    assert(whisper.querySelector('[data-end="left"]').classList.contains('review-whisper-checked'), 'Assigned endpoint not marked');
+    review.undo(); assert(!shown(), 'Whisper remained after undo');
+    review.redo(); review.activate(review.read()[0].id);
+    assert(shown(), 'No whisper for the active annotation'); equal(whisper.dataset.state, 'active'); equal(centre(), '✓ Accept · ••• to edit');
+    key(surface, 'Escape'); assert(!shown(), 'Whisper remained after Escape');
+    const p = surface.querySelector('p'); p.focus(); key(p, 'F2');
+    assert(shown(), 'No whisper in precise mode'); equal(whisper.dataset.state, 'precise'); equal(centre(), 'Selecting text');
+    key(p, 'F2'); assert(!shown(), 'Whisper remained after leaving precise mode without a range');
   } finally { review.destroy(); container.remove(); }
 });
 

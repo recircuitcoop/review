@@ -62,6 +62,92 @@ export function paintHighlights({ names, text, labels, annotations, pending, act
   CSS.highlights.set(names.active, new Highlight(...activeRanges));
 }
 
+// Static Lucide outlines (ISC licence), inlined so the widget needs no icon dependency.
+const ICONS = {
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  keyboard: '<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
+};
+
+/** A decorative 18px icon; its control carries the accessible name. */
+export function icon(name) {
+  const holder = document.createElement('span');
+  holder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`;
+  return holder.firstChild;
+}
+
+/** Put the whisper directly below the block holding `anchor`, moving it only when that block changes. */
+function placeWhisper(whisper, surface, anchor) {
+  const block = anchor ? selectableBlock(anchor) : null;
+  if (!block || !surface.contains(block)) {
+    if (whisper.parentNode !== surface) surface.append(whisper);
+    return;
+  }
+  // A list item keeps the whisper inside itself so the list stays a list.
+  if (block.tagName === 'LI') {
+    if (block.lastChild !== whisper) block.append(whisper);
+    return;
+  }
+  if (block.nextSibling !== whisper) block.after(whisper);
+}
+
+/**
+ * The contextual whisper, derived from session state plus the presentation-only
+ * `assignedId` (the annotation just labeled). It holds no committed data; label
+ * names always come from the current configuration. Hidden when there is no target.
+ */
+export function paintWhisper({ whisper, surface, text, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded }) {
+  const assigned = annotations.find(a => a.id === assignedId);
+  let state = null;
+  let target = null;
+  if (precise) {
+    state = 'precise';
+    target = pending;
+  } else if (pending) {
+    state = 'pending';
+    target = pending;
+  } else if (active) {
+    state = 'active';
+    target = active;
+  } else if (assigned) {
+    state = 'assigned';
+    target = assigned;
+  }
+  whisper.hidden = state === null;
+  if (!state) return;
+
+  // Below the final selected line: the block holding the range end (precise mode without a range: the caret block).
+  const end = target ? text.range(target.start, target.end).endContainer : focusedBlock;
+  placeWhisper(whisper, surface, end?.nodeType === Node.TEXT_NODE ? end.parentElement : end);
+
+  const checked = state === 'active' || state === 'assigned' ? labels.find(l => l.id === target.labelId) : null;
+  whisper.dataset.state = state;
+  whisper.dataset.assigned = checked?.direction ?? '';
+  for (const label of labels) {
+    const node = whisper.querySelector(`[data-end="${label.direction}"]`);
+    const name = checked === label ? `✓ ${label.name}` : label.name;
+    node.dataset.text = label.direction === 'left' ? `← ${name}` : `${name} →`;
+    node.classList.toggle('review-whisper-checked', checked === label);
+  }
+
+  // Centre: the state first, then the next useful action. Narrow widths hide the hint (CSS).
+  const status = whisper.querySelector('.review-whisper-status');
+  const hint = whisper.querySelector('.review-whisper-hint');
+  if (state === 'precise') {
+    status.dataset.text = 'Selecting text';
+    hint.dataset.text = '';
+  } else if (state === 'pending') {
+    status.dataset.text = 'Unlabeled';
+    hint.dataset.text = expanded ? ' · choose above' : ' · scroll ← → over selection';
+  } else if (state === 'active') {
+    status.dataset.text = `✓ ${checked.name}`;
+    hint.dataset.text = ' · ••• to edit';
+  } else {
+    // The Undo shortcut stays even when narrow: it is the approved recovery affordance.
+    status.dataset.text = `✓ ${checked.name} · ${undoKeys} undo`;
+    hint.dataset.text = '';
+  }
+}
+
 /** Rebuild the saved-annotation sidebar; each entry activates its annotation for editing. */
 export function renderSavedList({ list, count, labels, annotations, activeId }) {
   count.textContent = `Annotations (${annotations.length})`;

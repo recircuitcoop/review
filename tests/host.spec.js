@@ -31,7 +31,7 @@ test('unavailable preference storage still permits theming, loading and export',
 test('all core acceptance checks pass on this browser and operating system', async ({ page, browser, browserName }) => {
   console.info(`Acceptance environment: ${process.platform}; ${browserName} ${browser.version()}; Node ${process.version}`);
   await page.goto('/tests/browser-check.html');
-  await expect(page.locator('#summary')).toHaveText('PASS: 36/36 real-browser checks');
+  await expect(page.locator('#summary')).toHaveText('PASS: 41/41 real-browser checks');
 });
 
 for (const format of ['grouped', 'split']) {
@@ -65,14 +65,15 @@ for (const format of ['grouped', 'split']) {
     };
     page.on('dialog', dialog => dialog.accept());
     await open(payloads); await expect(page.locator('.review-saved-item')).toHaveCount(2);
-    await page.locator('.review-saved-item').first().click(); await page.getByRole('button', { name: 'À revoir', exact: true }).click();
+    const openActions = () => page.getByRole('button', { name: 'Annotation actions' }).click();
+    await page.locator('.review-saved-item').first().click(); await openActions(); await page.getByRole('button', { name: 'À revoir', exact: true }).click();
     await page.locator('.review-document li').last().click(); await page.getByRole('button', { name: 'Keep me', exact: true }).click();
     await page.getByRole('button', { name: 'Done', exact: true }).click();
     const updated = await download(); const annotations = updated.flatMap(payload => Object.values(payload.selections).flat());
     expect(annotations).toHaveLength(3);
     expect(annotations.find(annotation => annotation.id === original[0].id).labelId).toBe('reject-id');
     expect(annotations.find(annotation => annotation.id === original[1].id)).toEqual(original[1]);
-    await open(updated.slice().reverse()); await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await open(updated.slice().reverse()); await openActions(); await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect(page.locator('.review-saved-item')).toHaveCount(3);
     await page.getByRole('button', { name: 'Export files', exact: true }).click(); expect(await download()).toEqual(updated);
   });
