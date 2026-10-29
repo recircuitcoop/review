@@ -38,7 +38,7 @@ A project assessment found a spec/code conflict, unbuilt planned interaction (17
 ## Done
 
 - [x] 1 Docs
-- [ ] 2 Controller refactor
+- [x] 2 Controller refactor
 - [ ] 3 Native horizontal labeling
 - [ ] 4 Widget UI
 - [ ] 5 Records
