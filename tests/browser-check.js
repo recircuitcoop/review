@@ -261,14 +261,8 @@ await check('Pending replacement, host-control clicks, link suppression, and too
     const anchor = container.querySelector('.review-document a');
     const event = new MouseEvent('click', { bubbles: true, cancelable: true }); anchor.dispatchEvent(event);
     assert(event.defaultPrevented, 'Ordinary link click would navigate');
-    // A press outside the widget (e.g. a host Save button) cancels a gesture but keeps the pending range.
-    const surface = container.querySelector('.review-document');
-    surface.setPointerCapture = () => {}; surface.hasPointerCapture = () => false;
-    const rect = canonicalText(surface).range(review.export().document.text.indexOf('Next'), review.export().document.text.indexOf('Next') + 4).getClientRects()[0];
-    surface.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, button: 0, clientX: rect.left + 2, clientY: (rect.top + rect.bottom) / 2 }));
-    assert(container.querySelector('.review-swipe-preview'), 'Gesture did not start on pending text');
+    // A press outside the widget (e.g. a host Save button) keeps the pending range.
     document.querySelector('#summary').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 2, isPrimary: true, button: 0 }));
-    assert(!container.querySelector('.review-swipe-preview'), 'Outside press did not cancel the gesture');
     equal(pending.quote, 'Next 🌍 世界.', 'Outside press dropped the pending selection'); equal(review.read(), []);
     review.undo(); equal(review.read(), []);
   } finally { review.destroy(); container.remove(); }
@@ -371,43 +365,96 @@ await check('Destroying pending completion resolves it without callbacks, UI, or
   review.destroy(); equal(await promise, null); equal(saved, 0); equal(container.children.length, 0); equal(CSS.highlights.size, before); container.remove();
 });
 
-await check('Swipe controller handles final displacement, duplicate release, cancellation, and outside starts', () => {
-  for (const scenario of ['left', 'right', 'short', 'reversed', 'vertical', 'cancel', 'escape', 'outside', 'destroy']) {
+// Center of the first client rectangle of a canonical range, read at call time.
+function rangePoint(container, start, end) {
+  const surface = container.querySelector('.review-document');
+  surface.querySelector('p').scrollIntoView({ block: 'center' });
+  const rect = canonicalText(surface).range(start, end).getClientRects()[0];
+  return { clientX: (rect.left + rect.right) / 2, clientY: (rect.top + rect.bottom) / 2 };
+}
+// Dispatch a wheel event at a viewport point; returns the event so callers can inspect defaultPrevented.
+function wheel(container, point, init) {
+  const surface = container.querySelector('.review-document');
+  // An open modal makes the document inert to hit testing; still deliver to the surface to exercise the guard.
+  const hit = document.elementFromPoint(point.clientX, point.clientY);
+  const target = surface.contains(hit) ? hit : surface;
+  const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaMode: 0, ...point, ...init });
+  target.dispatchEvent(event);
+  return event;
+}
+
+await check('Pure horizontal wheel over pending text labels once per direction and never cancels scrolling', () => {
+  for (const [direction, deltaX] of [['left', -30], ['right', 30]]) {
+    const { container, review } = mount();
+    try {
+      review.select(3, 10);
+      const point = rangePoint(container, 3, 10);
+      const first = wheel(container, point, { deltaX, deltaY: 0 });
+      assert(!first.defaultPrevented, `${direction}: wheel was canceled`);
+      equal(review.read().length, 1, `${direction}: wrong commit count`);
+      equal(review.read()[0].labelId, direction); equal(review.read()[0].quote, 'One two');
+      // Later events of the same stream find no pending range; the saved annotation is not relabeled.
+      for (const repeat of [deltaX, deltaX, -deltaX]) assert(!wheel(container, point, { deltaX: repeat, deltaY: 0 }).defaultPrevented, 'Repeat was canceled');
+      equal(review.read().length, 1, `${direction}: repeated events committed again`);
+      equal(review.read()[0].labelId, direction, `${direction}: repeated events relabeled`);
+    } finally { review.destroy(); container.remove(); }
+  }
+});
+
+await check('Vertical, mixed-axis, zoom-chord, outside, no-pending, saved-only and dialog-open wheel input never labels', () => {
+  const scenarios = ['vertical', 'mixed', 'ctrl', 'meta', 'outside', 'no pending', 'saved only', 'dialog'];
+  for (const scenario of scenarios) {
     const { container, review } = mount(); let pending;
     container.addEventListener('review:selection', event => { pending = event.detail; });
     try {
-      const surface = container.querySelector('.review-document');
-      // Synthetic events have no native active pointer; trusted capture is checked by pointer-check.js.
-      surface.setPointerCapture = () => {}; surface.hasPointerCapture = () => false;
-      review.select(3, 29);
-      surface.querySelector('p').scrollIntoView({ block: 'center' });
-      const map = canonicalText(surface), range = map.range(3, 29), rect = range.getClientRects()[0];
-      const startX = scenario === 'outside' ? surface.getBoundingClientRect().left + 2 : rect.left + 3;
-      const startY = (rect.top + rect.bottom) / 2;
-      const send = (type, dx = 0, dy = 0) => surface.dispatchEvent(new PointerEvent(type, {
-        bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, button: 0, clientX: startX + dx, clientY: startY + dy
-      }));
-      const before = surface.getBoundingClientRect();
-      send('pointerdown');
-      if (scenario !== 'outside') assert(container.querySelector('.review-swipe-preview'), `${scenario}: no swipe preview`);
-      send('pointermove', scenario === 'left' ? -90 : 90);
-      const ghost = container.querySelector('.review-swipe-preview');
-      if (ghost) { assert(ghost.textContent.includes(pending.quote), 'Preview lost multiline quote'); equal(getComputedStyle(ghost).position, 'fixed'); }
-      equal(surface.getBoundingClientRect().height, before.height, 'Preview shifted document layout');
-      if (scenario === 'cancel') send('pointercancel');
-      if (scenario === 'escape') { key(surface, 'Escape'); assert(pending, 'First Escape cleared pending text'); }
-      if (scenario === 'destroy') { review.destroy(); assert(!container.querySelector('.review-swipe-preview'), 'Destroy leaked preview'); continue; }
-      const dx = scenario === 'left' ? -90 : ['short', 'reversed'].includes(scenario) ? 20 : 90;
-      send('pointerup', dx, scenario === 'vertical' ? 100 : 0);
-      send('pointerup', dx);
-      const expected = ['left', 'right'].includes(scenario);
-      equal(review.read().length, expected ? 1 : 0, `${scenario}: wrong commit count`);
-      if (expected) { equal(review.read()[0].labelId, scenario); equal(review.read()[0].quote, map.text.slice(3, 29)); }
-      else if (scenario !== 'outside') equal(pending.quote, map.text.slice(3, 29), `${scenario}: pending lost`);
-      assert(!container.querySelector('.review-swipe-preview'), `${scenario}: preview leaked`);
-      if (scenario === 'escape') { key(surface, 'Escape'); equal(pending, null, 'Second Escape did not clear selection'); }
+      if (scenario === 'saved only') {
+        // An active left annotation would be relabeled by a rightward classify; wheel must not do that.
+        review.select(3, 10); click(container, 'left'); review.activate(review.read()[0].id);
+      } else if (scenario !== 'no pending') review.select(3, 10);
+      if (scenario === 'dialog') click(container, 'help');
+      // "outside" hovers the heading, which lies outside the pending rectangles.
+      const point = scenario === 'outside' ? rangePoint(container, 0, 2) : rangePoint(container, 3, 10);
+      const init = {
+        vertical: { deltaX: 0, deltaY: 30 },
+        mixed: { deltaX: 30, deltaY: 2 },
+        ctrl: { deltaX: 30, deltaY: 0, ctrlKey: true },
+        meta: { deltaX: 30, deltaY: 0, metaKey: true },
+      }[scenario] ?? { deltaX: 30, deltaY: 0 };
+      const before = review.read();
+      const event = wheel(container, point, init);
+      assert(!event.defaultPrevented, `${scenario}: wheel was canceled`);
+      equal(review.read(), before, `${scenario}: annotations changed`);
+      if (!['no pending', 'saved only'].includes(scenario)) equal(pending?.quote, 'One two', `${scenario}: pending lost`);
+      if (scenario === 'dialog') container.querySelector('dialog').close();
     } finally { review.destroy(); container.remove(); }
   }
+});
+
+await check('Known limitation: a late wheel event after a new selection labels that new range', () => {
+  // Portable APIs cannot tell old momentum from a new gesture; plan 18 records this as open native evidence.
+  const { container, review } = mount();
+  try {
+    review.select(3, 10); wheel(container, rangePoint(container, 3, 10), { deltaX: -30, deltaY: 0 });
+    review.select(11, 14); wheel(container, rangePoint(container, 11, 14), { deltaX: -30, deltaY: 0 });
+    equal(review.read().map(a => a.quote), ['One two', 'and']);
+  } finally { review.destroy(); container.remove(); }
+});
+
+await check('A pointer press on pending text is left to native selection: no cancel, capture or preview', () => {
+  const { container, review } = mount();
+  try {
+    const surface = container.querySelector('.review-document');
+    let captured = false; surface.setPointerCapture = () => { captured = true; };
+    review.select(3, 10);
+    const point = rangePoint(container, 3, 10);
+    const init = { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, button: 0, ...point };
+    const down = new PointerEvent('pointerdown', init); surface.querySelector('p').dispatchEvent(down);
+    assert(!down.defaultPrevented, 'Press on pending text prevented native selection');
+    assert(!captured, 'Press on pending text captured the pointer');
+    assert(!container.querySelector('.review-swipe-preview'), 'Press on pending text showed a swipe preview');
+    surface.querySelector('p').dispatchEvent(new PointerEvent('pointerup', { ...init, clientX: point.clientX + 90 }));
+    equal(review.read(), [], 'Pointer drag labeled text');
+  } finally { review.destroy(); container.remove(); }
 });
 
 await check('All displayed shortcut hints and help use Cmd on Mac and Ctrl elsewhere, including remapping', () => {

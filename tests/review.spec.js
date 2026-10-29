@@ -35,16 +35,34 @@ test('exact native selection crosses formatting and canonical anchors survive re
   expect(await page.evaluate(() => review.export())).toEqual(before);
 });
 
-test('separate swipe commits once; canceled gestures retain pending range', async ({ page }) => {
+test('a mouse drag starting on pending text adjusts the native selection and never labels', async ({ page }) => {
   const block = page.locator('.review-document p').first();
   await block.click();
   const box = await block.boundingBox();
   const x = box.x + 45, y = box.y + 10;
-  await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 25, y, { steps: 4 }); await page.mouse.up();
-  expect(await page.evaluate(() => review.read())).toHaveLength(0);
   await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 95, y, { steps: 8 }); await page.mouse.up();
+  expect(await page.evaluate(() => review.read())).toHaveLength(0);
+  const dragged = await page.evaluate(() => getSelection().toString());
+  expect(dragged.length).toBeGreaterThan(0);
+  // The pending range now mirrors the dragged text, not the clicked paragraph.
+  await page.getByRole('button', { name: 'Accept', exact: true }).click();
+  expect((await page.evaluate(() => review.read()))[0].quote).toBe(dragged);
+});
+
+test('browser-generated horizontal wheel over pending text labels once; vertical wheel does not', async ({ page }) => {
+  const block = page.locator('.review-document p').first();
+  await block.click();
+  const box = await block.boundingBox();
+  await page.mouse.move(box.x + 45, box.y + 10);
+  await page.mouse.wheel(0, 40);
+  expect(await page.evaluate(() => review.read())).toHaveLength(0);
+  // Re-read geometry: the vertical wheel may have scrolled the document.
+  const moved = await block.boundingBox();
+  await page.mouse.move(moved.x + 45, moved.y + 10);
+  await page.mouse.wheel(-40, 0);
+  await page.mouse.wheel(-40, 0);
   const annotations = await page.evaluate(() => review.read());
-  expect(annotations).toHaveLength(1); expect(annotations[0].labelId).toBe('reject');
+  expect(annotations).toHaveLength(1); expect(annotations[0].labelId).toBe('accept');
 });
 
 test('clicks select list items and code blocks; keyboard navigation reaches both', async ({ page }) => {

@@ -2784,16 +2784,10 @@ function shortcutHelp(display) {
   return content;
 }
 
-// src/gesture.js
-function swipeDirection(dx, dy) {
-  if (Math.abs(dx) >= 60 && Math.abs(dx) >= 1.5 * Math.abs(dy)) return dx < 0 ? "left" : "right";
-  return null;
-}
-
 // src/pointer.js
 function installPointerInput(ctx) {
-  const { surface, root, text: text2, state, left, right, listen, safe } = ctx;
-  let gesture = null;
+  const { surface, text: text2, state, left, right, dialogs, listen, safe } = ctx;
+  let press = null;
   function pointAt(x2, y2) {
     const point = document.caretPositionFromPoint?.(x2, y2);
     if (point && surface.contains(point.offsetNode)) return text2.offset(point.offsetNode, point.offset);
@@ -2805,44 +2799,16 @@ function installPointerInput(ctx) {
     const rectangles = [...text2.range(anchor.start, anchor.end).getClientRects()];
     return rectangles.some((r) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom);
   }
-  function cancel() {
-    gesture?.preview?.remove();
-    if (gesture?.swipe && surface.hasPointerCapture?.(gesture.id)) surface.releasePointerCapture(gesture.id);
-    gesture = null;
-  }
   listen(surface, "pointerdown", (event) => {
     if (event.button !== 0 || !event.isPrimary) return;
-    const pending = state.pending;
-    const swipe = !!pending && hitRange(pending, event.clientX, event.clientY);
-    gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, swipe, target: event.target };
-    if (!swipe) return;
-    event.preventDefault();
-    surface.setPointerCapture(event.pointerId);
-    const preview = element("div", "review-swipe-preview", pending.quote);
-    preview.setAttribute("aria-hidden", "true");
-    root.append(preview);
-    gesture.preview = preview;
-  });
-  listen(surface, "pointermove", (event) => {
-    if (!gesture?.swipe || gesture.id !== event.pointerId) return;
-    const dx = event.clientX - gesture.x;
-    const preview = gesture.preview;
-    preview.hidden = Math.abs(dx) < 8;
-    preview.textContent = `${dx < 0 ? left.name : right.name} \xB7 ${state.pending?.quote ?? ""}`;
-    preview.style.left = `${Math.max(8, Math.min(innerWidth - 280, event.clientX + 12))}px`;
-    preview.style.top = `${Math.max(8, Math.min(innerHeight - 100, event.clientY + 15))}px`;
+    press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target };
   });
   listen(surface, "pointerup", (event) => safe(() => {
-    if (!gesture || gesture.id !== event.pointerId) return;
-    const current = gesture;
+    if (!press || press.id !== event.pointerId) return;
+    const current = press;
+    press = null;
     const dx = event.clientX - current.x;
     const dy = event.clientY - current.y;
-    cancel();
-    if (current.swipe) {
-      const direction = swipeDirection(dx, dy);
-      if (direction) ctx.classify(direction === "left" ? left : right);
-      return;
-    }
     if (ctx.nativeRange() || Math.hypot(dx, dy) > 4) {
       ctx.syncSelection();
       return;
@@ -2867,19 +2833,24 @@ function installPointerInput(ctx) {
     }
     state.clear();
   }));
-  listen(surface, "pointercancel", cancel);
-  listen(surface, "lostpointercapture", cancel);
-  listen(document, "pointerup", (event) => {
-    if (!gesture || gesture.swipe || surface.contains(event.target)) return;
-    ctx.syncSelection();
-    cancel();
+  listen(surface, "pointercancel", () => {
+    press = null;
   });
-  return {
-    cancel,
-    isSwiping() {
-      return !!gesture?.swipe;
-    }
-  };
+  listen(document, "pointerup", (event) => {
+    if (!press || surface.contains(event.target)) return;
+    press = null;
+    ctx.syncSelection();
+  });
+  listen(surface, "wheel", (event) => safe(() => {
+    if (event.deltaX === 0 || event.deltaY !== 0) return;
+    if (event.ctrlKey || event.metaKey) return;
+    if (dialogs.isOpen) return;
+    ctx.syncSelection();
+    const pending = state.pending;
+    if (!pending) return;
+    if (!hitRange(pending, event.clientX, event.clientY)) return;
+    ctx.classify(event.deltaX < 0 ? left : right);
+  }), { passive: true });
 }
 
 // src/review.js
@@ -2933,7 +2904,7 @@ function mountReview(container, options) {
   const list = element("ol", "review-annotation-list");
   const count = element("h2", "", "Annotations (0)");
   sidebar.append(count, list);
-  const status = element("p", "review-status", "Click a paragraph, heading, list item, or code block; or drag an exact range.");
+  const status = element("p", "review-status", "Click a paragraph, heading, list item, or code block; or drag an exact range. Then hover it and scroll left or right, or choose a label.");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
   const mode = element("p", "review-mode", READ_ONLY_MODE);
@@ -3005,7 +2976,7 @@ function mountReview(container, options) {
     return range;
   }
   function syncSelection() {
-    if (destroyed || pointer.isSwiping() || dialogs.isOpen) return;
+    if (destroyed || dialogs.isOpen) return;
     const range = nativeRange();
     if (!range) return;
     const { start, end } = text2.fromRange(range);
@@ -3244,13 +3215,13 @@ function mountReview(container, options) {
   listen(surface, "beforeinput", (event) => event.preventDefault());
   listen(surface, "paste", (event) => event.preventDefault());
   listen(surface, "cut", (event) => event.preventDefault());
-  const pointer = installPointerInput({
+  installPointerInput({
     surface,
-    root,
     text: text2,
     state,
     left,
     right,
+    dialogs,
     listen,
     safe,
     classify,
@@ -3266,7 +3237,6 @@ function mountReview(container, options) {
   });
   listen(document, "pointerdown", (event) => {
     if (root.contains(event.target)) return;
-    pointer.cancel();
     if (!precise) return;
     precise = false;
     paint();
@@ -3294,11 +3264,6 @@ function mountReview(container, options) {
   listen(root, "keydown", (event) => {
     if (event.isComposing || event.target.isContentEditable || event.target.closest("input,textarea,select")) return;
     if (dialogs.isOpen) return;
-    if (event.key === "Escape" && pointer.isSwiping()) {
-      event.preventDefault();
-      pointer.cancel();
-      return;
-    }
     if (precise && surface.contains(event.target) && ARROW_KEYS.includes(event.key)) {
       movePreciseCaret(event);
       return;
@@ -3363,7 +3328,6 @@ function mountReview(container, options) {
       if (destroyed) return;
       destroyed = true;
       listeners.abort();
-      pointer.cancel();
       dialogs.close("cancel");
       for (const name of Object.values(names)) CSS.highlights.delete(name);
       if (nativeRange()) getSelection().removeAllRanges();

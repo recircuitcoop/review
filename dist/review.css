@@ -103,7 +103,7 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review .review-finish:hover { background: var(--review-primary-hover); }
 .review-mode { font-size: var(--review-small-size); color: var(--review-muted); margin: 0; padding: var(--review-status-padding); border-bottom: var(--review-border-width) solid var(--review-border); }
 .review-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
-.review-document { font-family: var(--review-document-font); font-size: var(--review-document-size); line-height: var(--review-document-line-height); padding: var(--review-document-padding); min-height: 25rem; overflow-wrap: anywhere; touch-action: pan-y; }
+.review-document { font-family: var(--review-document-font); font-size: var(--review-document-size); line-height: var(--review-document-line-height); padding: var(--review-document-padding); min-height: 25rem; overflow-wrap: anywhere; }
 .review-document :is(h1, h2, h3, h4, h5, h6) { font-family: var(--review-heading-font); letter-spacing: var(--review-heading-spacing); line-height: var(--review-heading-line-height); }
 .review-document h1 { font-size: var(--review-heading-size); }
 .review-document p { margin: 0 0 var(--review-paragraph-spacing); }
@@ -126,7 +126,6 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review-shortcuts { display: grid; grid-template-columns: 1fr 2fr; gap: var(--review-toolbar-gap); font-size: var(--review-small-size); }
 .review-shortcuts dt { font-weight: 650; }
 .review-shortcuts dd { margin: 0; }
-.review-swipe-preview { position: fixed; z-index: 10; pointer-events: none; width: 260px; max-height: 6rem; overflow: hidden; background: var(--review-primary); color: var(--review-on-primary); border-radius: var(--review-button-radius); padding: var(--review-button-padding); box-shadow: 0 8px 32px var(--review-shadow); font-size: var(--review-small-size); }
 footer { font-size: .75rem; color: var(--review-muted); margin-top: 2rem; }
 [hidden] { display: none !important; }
 @media (max-width: 850px) { .review-layout { grid-template-columns: 1fr; } .review-saved { border-left: 0; border-top: var(--review-border-width) solid var(--review-border); } .review-document { padding: var(--review-narrow-document-padding); } }

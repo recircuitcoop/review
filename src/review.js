@@ -64,7 +64,7 @@ export function mountReview(container, options) {
   const list = element('ol', 'review-annotation-list');
   const count = element('h2', '', 'Annotations (0)');
   sidebar.append(count, list);
-  const status = element('p', 'review-status', 'Click a paragraph, heading, list item, or code block; or drag an exact range.');
+  const status = element('p', 'review-status', 'Click a paragraph, heading, list item, or code block; or drag an exact range. Then hover it and scroll left or right, or choose a label.');
   status.setAttribute('role', 'status');
   status.setAttribute('aria-live', 'polite');
   const mode = element('p', 'review-mode', READ_ONLY_MODE);
@@ -146,9 +146,9 @@ export function mountReview(container, options) {
     if (!surface.contains(range.startContainer) || !surface.contains(range.endContainer)) return null;
     return range;
   }
-  /** Mirror the native range into the pending selection. Swipes and dialogs freeze it. */
+  /** Mirror the native range into the pending selection. Open dialogs freeze it. */
   function syncSelection() {
-    if (destroyed || pointer.isSwiping() || dialogs.isOpen) return;
+    if (destroyed || dialogs.isOpen) return;
     const range = nativeRange();
     if (!range) return;
     const { start, end } = text.fromRange(range);
@@ -159,7 +159,7 @@ export function mountReview(container, options) {
     if (nativeRange()) getSelection().removeAllRanges();
   }
 
-  // --- Operations shared by buttons, keys and pointer ----------------------
+  // --- Operations shared by buttons, keys, clicks and wheel -----------------
   /** The single commit path: assigns the label to the pending range or relabels the active annotation. */
   function classify(label) {
     syncSelection();
@@ -409,13 +409,13 @@ export function mountReview(container, options) {
   listen(surface, 'paste', event => event.preventDefault());
   listen(surface, 'cut', event => event.preventDefault());
 
-  const pointer = installPointerInput({
+  installPointerInput({
     surface,
-    root,
     text,
     state,
     left,
     right,
+    dialogs,
     listen,
     safe,
     classify,
@@ -429,11 +429,10 @@ export function mountReview(container, options) {
     activate,
     selectBlock,
   });
-  // A press outside the widget (host controls such as Save) only cancels a gesture.
+  // A press outside the widget (host controls such as Save) only leaves precise mode.
   // Moving focus alone never removes the pending range; clicks on document text replace it.
   listen(document, 'pointerdown', event => {
     if (root.contains(event.target)) return;
-    pointer.cancel();
     if (!precise) return;
     precise = false;
     paint();
@@ -466,11 +465,6 @@ export function mountReview(container, options) {
     // Editable fields, IME composition and open dialogs keep their own keys.
     if (event.isComposing || event.target.isContentEditable || event.target.closest('input,textarea,select')) return;
     if (dialogs.isOpen) return;
-    if (event.key === 'Escape' && pointer.isSwiping()) {
-      event.preventDefault();
-      pointer.cancel();
-      return;
-    }
     if (precise && surface.contains(event.target) && ARROW_KEYS.includes(event.key)) {
       movePreciseCaret(event);
       return;
@@ -539,7 +533,6 @@ export function mountReview(container, options) {
       if (destroyed) return;
       destroyed = true;
       listeners.abort();
-      pointer.cancel();
       dialogs.close('cancel');
       for (const name of Object.values(names)) CSS.highlights.delete(name);
       if (nativeRange()) getSelection().removeAllRanges();

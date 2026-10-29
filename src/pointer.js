@@ -1,16 +1,16 @@
-import { swipeDirection } from './gesture.js';
-import { element, selectableBlock } from './render.js';
+import { selectableBlock } from './render.js';
 
 /**
- * Pointer input on the document surface: swipe classification of the pending
- * range, click-to-select blocks, and clicks on saved highlights.
- * The annotator supplies shared operations through `ctx`, so a swipe commits
+ * Pointer-device input on the document surface: click-to-select blocks, clicks on
+ * saved highlights, and native horizontal scrolling over the pending range.
+ * Pointer presses never label; drags stay native text selection.
+ * The annotator supplies shared operations through `ctx`, so a wheel label commits
  * through the same `classify` path as buttons and keys.
- * Returns `cancel()` and `isSwiping()` for the annotator's lifecycle and keyboard.
  */
 export function installPointerInput(ctx) {
-  const { surface, root, text, state, left, right, listen, safe } = ctx;
-  let gesture = null;
+  const { surface, text, state, left, right, dialogs, listen, safe } = ctx;
+  // The primary press in progress, kept only to tell a click from a drag on release.
+  let press = null;
 
   function pointAt(x, y) {
     const point = document.caretPositionFromPoint?.(x, y);
@@ -20,55 +20,24 @@ export function installPointerInput(ctx) {
     return null;
   }
 
-  /** Whether a viewport point lies on the rendered rectangles of a text range. */
+  /** Whether a viewport point lies on the rendered rectangles of a text range, read now. */
   function hitRange(anchor, x, y) {
     const rectangles = [...text.range(anchor.start, anchor.end).getClientRects()];
     return rectangles.some(r => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
   }
 
-  function cancel() {
-    gesture?.preview?.remove();
-    if (gesture?.swipe && surface.hasPointerCapture?.(gesture.id)) surface.releasePointerCapture(gesture.id);
-    gesture = null;
-  }
-
+  // No preventDefault or capture: a press on pending text starts native text selection.
   listen(surface, 'pointerdown', event => {
     if (event.button !== 0 || !event.isPrimary) return;
-    const pending = state.pending;
-    // Only a press on the pending highlight starts a swipe; anything else is a click or native drag.
-    const swipe = !!pending && hitRange(pending, event.clientX, event.clientY);
-    gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, swipe, target: event.target };
-    if (!swipe) return;
-    event.preventDefault();
-    surface.setPointerCapture(event.pointerId);
-    const preview = element('div', 'review-swipe-preview', pending.quote);
-    preview.setAttribute('aria-hidden', 'true');
-    root.append(preview);
-    gesture.preview = preview;
-  });
-
-  listen(surface, 'pointermove', event => {
-    if (!gesture?.swipe || gesture.id !== event.pointerId) return;
-    const dx = event.clientX - gesture.x;
-    const preview = gesture.preview;
-    preview.hidden = Math.abs(dx) < 8;
-    preview.textContent = `${dx < 0 ? left.name : right.name} · ${state.pending?.quote ?? ''}`;
-    preview.style.left = `${Math.max(8, Math.min(innerWidth - 280, event.clientX + 12))}px`;
-    preview.style.top = `${Math.max(8, Math.min(innerHeight - 100, event.clientY + 15))}px`;
+    press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target };
   });
 
   listen(surface, 'pointerup', event => safe(() => {
-    if (!gesture || gesture.id !== event.pointerId) return;
-    const current = gesture;
+    if (!press || press.id !== event.pointerId) return;
+    const current = press;
+    press = null;
     const dx = event.clientX - current.x;
     const dy = event.clientY - current.y;
-    cancel();
-    if (current.swipe) {
-      // Final displacement decides; a reversed or short swipe keeps the pending range.
-      const direction = swipeDirection(dx, dy);
-      if (direction) ctx.classify(direction === 'left' ? left : right);
-      return;
-    }
     // A drag (even one pixel that produced a native range) keeps its exact range.
     if (ctx.nativeRange() || Math.hypot(dx, dy) > 4) {
       ctx.syncSelection();
@@ -95,19 +64,31 @@ export function installPointerInput(ctx) {
     state.clear();
   }));
 
-  listen(surface, 'pointercancel', cancel);
-  listen(surface, 'lostpointercapture', cancel);
+  listen(surface, 'pointercancel', () => {
+    press = null;
+  });
   // A drag that leaves the surface still produces its native range on release.
   listen(document, 'pointerup', event => {
-    if (!gesture || gesture.swipe || surface.contains(event.target)) return;
+    if (!press || surface.contains(event.target)) return;
+    press = null;
     ctx.syncSelection();
-    cancel();
   });
 
-  return {
-    cancel,
-    isSwiping() {
-      return !!gesture?.swipe;
-    },
-  };
+  // Plan 25 trigger rule: browser-reported pure horizontal scrolling over the pending
+  // highlight labels it once. Passive and never canceled, so native scrolling, zoom and
+  // navigation stay untouched. A commit clears pending, so the rest of the stream does nothing.
+  listen(surface, 'wheel', event => safe(() => {
+    // Mixed-axis input fails closed; no axis ratio or thresholds.
+    if (event.deltaX === 0 || event.deltaY !== 0) return;
+    // Ctrl/Meta wheel is a zoom chord.
+    if (event.ctrlKey || event.metaKey) return;
+    if (dialogs.isOpen) return;
+    // Mirror any native range first so the hit test uses the current pending target.
+    ctx.syncSelection();
+    const pending = state.pending;
+    // Without a pending range classify would relabel an active saved annotation; wheel never does.
+    if (!pending) return;
+    if (!hitRange(pending, event.clientX, event.clientY)) return;
+    ctx.classify(event.deltaX < 0 ? left : right);
+  }), { passive: true });
 }
