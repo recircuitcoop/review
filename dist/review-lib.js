@@ -3176,8 +3176,8 @@ function mountReview(container, options) {
       }
       return true;
     },
-    undo: () => travel("undo"),
-    redo: () => travel("redo"),
+    undo: () => travelCommand("undo"),
+    redo: () => travelCommand("redo"),
     nextBlock: () => moveBlock(1),
     previousBlock: () => moveBlock(-1),
     nextAnnotation: () => navigateAnnotation(1),
@@ -3197,13 +3197,17 @@ function mountReview(container, options) {
     }
   };
   function travel(direction) {
-    const canceled = !!(precise || state.pending || state.activeId || nativeRange());
     precise = false;
     resetNative();
     const changed = state[direction]();
+    paint();
+    return changed;
+  }
+  function travelCommand(direction) {
+    const canceled = !!(precise || state.pending || state.activeId || nativeRange());
+    const changed = travel(direction);
     if (!canceled && !changed) return false;
     surface.focus();
-    paint();
     announce(direction === "undo" ? "Undone." : "Redone.");
     return true;
   }
@@ -3340,13 +3344,11 @@ function mountReview(container, options) {
     },
     undo() {
       guard();
-      resetNative();
-      return state.undo();
+      return travel("undo");
     },
     redo() {
       guard();
-      resetNative();
-      return state.redo();
+      return travel("redo");
     },
     export(exportFormat = format) {
       guard();

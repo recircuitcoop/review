@@ -334,8 +334,8 @@ export function mountReview(container, options) {
       }
       return true;
     },
-    undo: () => travel('undo'),
-    redo: () => travel('redo'),
+    undo: () => travelCommand('undo'),
+    redo: () => travelCommand('redo'),
     nextBlock: () => moveBlock(1),
     previousBlock: () => moveBlock(-1),
     nextAnnotation: () => navigateAnnotation(1),
@@ -353,15 +353,20 @@ export function mountReview(container, options) {
       return true;
     },
   };
-  /** Undo/redo also cancel any selection; they count as applied if either happened. */
+  /** Undo/redo for every caller: leave precise mode, drop any selection, repaint. Returns whether history moved. */
   function travel(direction) {
-    const canceled = !!(precise || state.pending || state.activeId || nativeRange());
     precise = false;
     resetNative();
     const changed = state[direction]();
+    paint();
+    return changed;
+  }
+  /** Keyboard/toolbar undo/redo count as applied if they canceled a selection or moved history. */
+  function travelCommand(direction) {
+    const canceled = !!(precise || state.pending || state.activeId || nativeRange());
+    const changed = travel(direction);
     if (!canceled && !changed) return false;
     surface.focus();
-    paint();
     announce(direction === 'undo' ? 'Undone.' : 'Redone.');
     return true;
   }
@@ -513,13 +518,11 @@ export function mountReview(container, options) {
     },
     undo() {
       guard();
-      resetNative();
-      return state.undo();
+      return travel('undo');
     },
     redo() {
       guard();
-      resetNative();
-      return state.redo();
+      return travel('redo');
     },
     export(exportFormat = format) {
       guard();

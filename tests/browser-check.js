@@ -444,6 +444,19 @@ await check('Platform detection prefers userAgentData, falls back to navigator.p
   } finally { restorePlatform(); }
 });
 
+await check('Public undo and redo leave precise mode and repaint like the keyboard path', () => {
+  const { container, review } = mount();
+  try {
+    review.select(3, 10); click(container, 'left');
+    const p = container.querySelector('.review-document p'); const mode = container.querySelector('.review-mode');
+    p.focus(); key(p, 'F2'); assert(mode.textContent.startsWith('Precise'), 'F2 did not enter precise mode');
+    equal(review.undo(), true); assert(mode.textContent.startsWith('Read-only'), 'Public undo stayed in precise mode');
+    assert(key(p, 'ArrowRight', { shiftKey: true }), 'Arrow keys still drive the precise caret after undo');
+    p.focus(); key(p, 'F2'); equal(review.redo(), true); assert(mode.textContent.startsWith('Read-only'), 'Public redo stayed in precise mode');
+    equal(review.read().length, 1); equal(review.redo(), false);
+  } finally { review.destroy(); container.remove(); }
+});
+
 const failed = results.filter(r => !r.passed).length;
 document.querySelector('#summary').textContent = `${failed ? 'FAIL' : 'PASS'}: ${results.length - failed}/${results.length} real-browser checks`;
 document.title = document.querySelector('#summary').textContent;
