@@ -14,7 +14,7 @@ Proceed **17 → 18 → 19 → 20**, with no implementation past a failed prereq
 
 ## Working method
 
-Widget visual planning is tracked in [21 — Library widget design](21-LIBRARY-WIDGET-DESIGN.md), with accepted flow decisions in [22](22-WHISPER-USER-FLOW-REVIEW.md). The lo-fi is approved; [23 — High fidelity](23-WIDGET-HIGH-FIDELITY.md) is ready for user review. A fixed-height toolbar swaps in through •••. The contextual whisper uses actual label values, explicit checked assignment and no idle row; the keyboard icon opens shortcut help. Done and the retained Export files control are the user-facing export actions ([25](25-ASSESSMENT-REMEDIATION.md)). These design gates precede production UI work in 18/19 and do not replace native-input proof.
+Widget visual planning is tracked in [21 — Library widget design](21-LIBRARY-WIDGET-DESIGN.md), with accepted flow decisions in [22](22-WHISPER-USER-FLOW-REVIEW.md). The lo-fi and [23 — High fidelity](23-WIDGET-HIGH-FIDELITY.md) are approved and implemented in production. A fixed-height toolbar swaps in through •••. The contextual whisper uses actual label values, explicit checked assignment and no idle row; the keyboard icon opens shortcut help. Done and the retained Export files control are the user-facing export actions ([25](25-ASSESSMENT-REMEDIATION.md)). These design gates precede production UI work in 18/19 and do not replace native-input proof.
 
 Write any missing contract details in the owning plan before tests or code. Add the listed failing tests, implement only that slice, then check off its completion items with actual commands and evidence. Reuse the same fixtures and test harness. Do not invent commands before tooling exists.
 

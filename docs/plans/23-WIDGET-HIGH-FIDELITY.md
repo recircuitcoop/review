@@ -1,6 +1,6 @@
 # 23 — Widget high-fidelity design
 
-Status: **high-fidelity preview ready for user review; production implementation not started**.
+Status: **approved; production implemented** (plan 25 slice 4, 2026-10-29). See [implementation contract](../IMPLEMENTATION.md#widget-presentation).
 The user approved the lo-fi flow and requested high fidelity. This refines 21/22 without changing their accepted interactions or bypassing native-input gates in 17–20.
 
 ## Locked interaction contract
@@ -32,8 +32,13 @@ The narrow example retains the already-exposed long-label wrapping tradeoff; thi
 - [x] Verify swap and return stay in the same row, with no document movement.
 - [x] Verify the keyboard popup is on screen, closes with Escape and retains selection.
 - [x] Inspect long names/narrow layout, and check the normal-text palette contrast.
-- [ ] User reviews high fidelity before production UI implementation.
+- [x] User reviews high fidelity before production UI implementation.
+- [x] Production navbar, action strip (with Export files), whisper and keycap help implemented with regression tests.
 
 Use the existing preview transition assertions and syntax checks; production regression tests belong to the implementation slices after this design review.
 
 Evidence: preview syntax and history/target assertions passed; embedded CSS matches its source file. Ten principal text/background pairs passed AA normal-text contrast (minimum 5.03:1). Safari inspection covered both appearances, the narrow wrapping tradeoff, popup/keycaps, Escape and focus return, swap/return without document movement, and explicit `✓ Reject · Cmd+Z undo` with matching passage/endpoint colour. No claim of complete accessibility or native-input acceptance follows from these preview checks.
+
+Production evidence (2026-10-29): `npm run check` green — unit tests plus Playwright on Chromium, Firefox and WebKit. New browser checks: title with ID fallback and validation; ••• swap keeps the 62px navbar height and document position, Export files present, Mod+Shift+E exports; Escape collapses the strip before clearing; keyboard icon and F1 open identical keycap help with actual labels and return focus without clearing; whisper absent when idle/after clear/after Undo and correct for pending, precise, just-assigned (actual label and effective Undo) and active; whisper adds no canonical text. A real-input Playwright case repeats swap geometry, Escape order, Export/Mod+Shift+E and icon/F1 help. Unit tests add AA contrast for the default widget palette in both appearances and a consumer check for every public token. Screenshots of both themes (pending, assigned, strip open, help, 360px) were compared with this preview.
+
+Known differences from the preview: production keeps the saved-annotations sidebar and bottom status line (existing features and the announcement channel); pending/committed marks use CSS Custom Highlights, so the fill covers text only rather than full line boxes and active editing has no outline; help closes with a text Close button at the end rather than an X in the heading; strip commands are not disabled when inapplicable (they do nothing instead); the pending hint reads `scroll ← → over selection`. Native-input gates (17–20) and screen-reader checks remain open.

@@ -56,7 +56,7 @@ Desktop labeling by scrolling ([plan 25](plans/25-ASSESSMENT-REMEDIATION.md) tri
 
 ## Public API and events
 
-`mountReview(container, {document: {id, version, markdown}, labels: [{id, name, direction}], shortcuts?, styles?, exportFormat?, onFinish?})` returns `select(start,end)`, `clear()`, `activate(id)`, `relabel(id,labelId)`, `delete(id)`, `read()`, `restore(payloadOrSplitPayloadArray)`, `undo()`, `redo()`, `export(format?)`, `finish()`, `destroy()`, and `shortcuts` (a copy of effective mappings). Invalid input throws a useful error; UI commands announce errors and dispatch `review:error`.
+`mountReview(container, {document: {id, version, markdown, title?}, labels: [{id, name, direction}], shortcuts?, styles?, exportFormat?, onFinish?})` returns `select(start,end)`, `clear()`, `activate(id)`, `relabel(id,labelId)`, `delete(id)`, `read()`, `restore(payloadOrSplitPayloadArray)`, `undo()`, `redo()`, `export(format?)`, `finish()`, `destroy()`, and `shortcuts` (a copy of effective mappings). Invalid input throws a useful error; UI commands announce errors and dispatch `review:error`.
 
 Container events `review:create`, `review:update`, `review:delete`, and `review:selection` carry copied annotation/range data; `review:complete` carries exported data after a successful `onFinish(data)` promise. No promise rejection clears state or completes the session. Finish with pending text opens a label/discard dialog; dismissing it cancels completion. Destruction is idempotent, restores original container nodes, and removes owned listeners/highlights/UI. Mutations after destruction throw. Mounted instances use distinct highlight names and scoped commands.
 
@@ -85,6 +85,15 @@ Visible shortcut hints and help expand the host's abstract `Mod` binding to **Cm
 ## Planned native-scroll and mobile interaction follow-up
 
 Plans [17](plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md)–[20](plans/20-INPUT-UX-ACCEPTANCE.md) document the user-requested correction: desktop hover over pending text plus native horizontal scrolling; no dragged-text/handle requirement, no custom diagonal classifier, no vertical-to-horizontal conversion, no native scrolling/zoom/navigation suppression. The desktop rule above is implemented; the 17 first-use study and native trackpad/mouse evidence remain open. Mobile native text selection and touch classification need a separate prototype and actual iOS/Android proof. No public label/export/restore schema or setup UI is added by this planning work.
+
+## Widget presentation
+
+Implemented from [plan 23](plans/23-WIDGET-HIGH-FIDELITY.md) with Export retained ([25](plans/25-ASSESSMENT-REMEDIATION.md)).
+
+- **Navbar** — one row of fixed height (`navbarHeight`, 62px): document name (`document.title`, optional string, falling back to `document.id`), keyboard icon (`data-command="help"`, opens the same help as F1), ••• (`aria-expanded`, `aria-controls`) and Done (most emphasized). ••• swaps the name for the action strip in place and back; it never adds a row or moves the document. Narrow widths scroll the strip natively in that row.
+- **Action strip** — every other command (`left`, `right`, `clear`, `remove`, `undo`, `redo`, `previousBlock`, `nextBlock`, `selectBlock`, `precise`, `previousAnnotation`, `nextAnnotation`, `export`) with configured label names, `title` and `aria-keyshortcuts` from the effective mapping. Toggling never selects, clears or labels. The first Escape while open collapses it (focus returns to ••• if it was inside) and keeps the target; the next Escape is the ordinary clear.
+- **Whisper** — a row inside the document directly after the block holding the target's end (inside the list item for list items), so the passage itself never moves. Its words are CSS generated content (`data-text`), so it adds no text nodes: canonical text, native selection and caret movement pass over it. Derived on every paint from session state plus two presentation-only values (strip open, the annotation just labeled); no second committed store. Precedence: precise → `Selecting text`; pending → `← left`, `Unlabeled · scroll ← → over selection` (`· choose above` while the strip is open), `right →`; active saved → `✓ label · ••• to edit`; just assigned → `✓ label · {effective Undo} undo` with the matching end checked and underlined. Any `review:selection` transition (select, clear, activate, undo/redo, restore) ends the just-assigned confirmation; no timeout. Hidden when idle, after clear and after Undo. Below 500px container width the explanatory hint hides, leaving the state and both full label names (which wrap). The whisper is not a live region; the existing polite status line remains the single announcement channel.
+- **Help** — keycaps for the effective platform mapping and actual label names; selection/navigation commands in a `<details>` section; Close button and Escape return focus without touching the target.
 
 ### Instance appearance
 

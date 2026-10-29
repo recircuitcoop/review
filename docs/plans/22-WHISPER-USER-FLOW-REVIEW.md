@@ -1,6 +1,6 @@
 # 22 — Whisper user-flow review
 
-Status: **specialist review; proposed flow, not implementation or user-tested copy**.
+Status: **specialist review; the resulting flow is implemented in production via [23](23-WIDGET-HIGH-FIDELITY.md); copy is not user-tested**.
 
 **Superseded 2026-10-29 ([25](25-ASSESSMENT-REMEDIATION.md)): the user decided to keep the separate Export files control and `Mod+Shift+E`.** Earlier completion decision: **no standalone Export control** in the mounted interface or shortcut popup. Done resolves any pending range, then automatically runs the configured export/completion flow. Keep retryable failure handling and both label outputs. The host's programmatic export API remains available; this is a user-interface decision. The current lo-fi removes Export and calls the completion shortcut `Done & export`; it does not download files.
 
