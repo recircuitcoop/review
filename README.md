@@ -6,7 +6,7 @@ A local Markdown review app and framework-independent browser library. Select a 
 
 ## Use the app
 
-Open [dist/review.html](dist/review.html) in a current desktop browser supporting CSS Custom Highlight and `Selection.modify`. This single file includes its dependencies and runs offline without a server. Chromium 143 and Safari 26.3.1 on macOS pass the local browser check pages. The initial CI suite passed on Windows/Linux/macOS with Chromium/Firefox/WebKit; newer feature tests still await that matrix. The [repository setup and CI matrix](docs/REPOSITORY.md) targets all three operating systems and all three browser engines.
+Open [dist/review.html](dist/review.html) in a current desktop browser supporting CSS Custom Highlight and `Selection.modify`. This single file includes its dependencies and runs offline without a server. The local suite (26 Node tests, 57 Playwright cases across Chromium, Firefox and WebKit) passes on macOS. The initial CI suite passed on Windows/Linux/macOS with Chromium/Firefox/WebKit; newer feature tests still await that matrix. The [repository setup and CI matrix](docs/REPOSITORY.md) targets all three operating systems and all three browser engines.
 
 1. Choose a Markdown file, name the two labels, and click **Start review**.
 2. Click a paragraph, heading, list item, or fenced code block; or drag an exact text range. Selection alone saves nothing. Code selection preserves indentation and line breaks.

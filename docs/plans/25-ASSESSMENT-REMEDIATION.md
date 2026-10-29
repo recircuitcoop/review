@@ -41,5 +41,5 @@ A project assessment found a spec/code conflict, unbuilt planned interaction (17
 - [x] 2 Controller refactor
 - [x] 3 Native horizontal labeling
 - [x] 4 Widget UI
-- [ ] 5 Records
+- [x] 5 Records (Codebase Memory indexing remained blocked: `index worker could not start: active daemon coordination could not be verified safely`)
 - [ ] 6 Land
