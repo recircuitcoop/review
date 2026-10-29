@@ -10,7 +10,7 @@ Open [dist/review.html](dist/review.html) in a current desktop browser supportin
 
 1. Choose a Markdown file, name the two labels, and click **Start review**.
 2. Click a paragraph, heading, list item, or fenced code block; or drag an exact text range. Selection alone saves nothing. Code selection preserves indentation and line breaks.
-3. Click a label, use Alt+Left/Right, or make a separate horizontal swipe on the pending highlight. The sidebar shows saved annotations.
+3. Click a label, use Alt+Left/Right, or hover the pending highlight and scroll left or right (trackpad, tilt wheel, or Shift+wheel where the browser reports horizontal scrolling). Dragging always selects text; it never labels. The sidebar shows saved annotations.
 4. Use **Done** or **Export files**. Split export provides `<file>_<leftlabel>.json` and `<file>_<rightlabel>.json`, including an empty file for an unused label. For `notes.md` with `Accept` / `Reject`, these are `notes_Accept.json` and `notes_Reject.json`.
 5. Click each named download link to save both files; downloads are explicit rather than automatic. Re-export after changing annotations; stale links are removed automatically.
 

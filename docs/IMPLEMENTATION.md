@@ -36,7 +36,7 @@ Switch appearance in place. Do not replace document nodes, remount, clear select
 
 ## Dependency and browser decision
 
-Use Marked for Markdown and DOMPurify for sanitization; installed package documentation is the API reference while network/DNS is unavailable. Recogito cannot be fetched/evaluated in this environment and is not adopted. Native DOM Range/Selection, CSS Custom Highlight, and pointer events provide selection, overlapping highlights, and gesture recognition without an engine-owned second annotation store. The library owns all committed state and history. Initial automated target: Chromium desktop with CSS Custom Highlight and Selection.modify. Actual OS shortcut delivery and assistive technology require manual validation before broader support claims.
+Use Marked for Markdown and DOMPurify for sanitization; installed package documentation is the API reference while network/DNS is unavailable. Recogito cannot be fetched/evaluated in this environment and is not adopted. Native DOM Range/Selection, CSS Custom Highlight, pointer events and wheel events provide selection, overlapping highlights, clicks and horizontal-scroll labeling without an engine-owned second annotation store. The library owns all committed state and history. Initial automated target: Chromium desktop with CSS Custom Highlight and Selection.modify. Actual OS shortcut delivery and assistive technology require manual validation before broader support claims.
 
 ## Canonical text v1
 
@@ -44,7 +44,7 @@ Traverse sanitized document text nodes in DOM order. Preserve text-node whitespa
 
 ## State, gestures, and editing
 
-Core completion rules: a nonempty native drag range takes precedence over block-click selection even below the pointer-distance tolerance. Keyboard commands prevent browser defaults only when their operation is applicable. In particular, left/right classification with no pending or saved target must not consume its shortcut; Delete/Backspace inside the document remains intentionally handled even without a target. Canceling a swipe closes its preview first and preserves the pending selection; a later Escape clears that selection.
+Core completion rules: a nonempty native drag range takes precedence over block-click selection even below the pointer-distance tolerance. Keyboard commands prevent browser defaults only when their operation is applicable. In particular, left/right classification with no pending or saved target must not consume its shortcut; Delete/Backspace inside the document remains intentionally handled even without a target.
 
 Selectable blocks include paragraphs, headings, list items, and fenced code blocks. A list item owns clicks on its child paragraphs; the nearest nested list item or fenced code block takes precedence. Clicking code preserves indentation and line breaks. Keyboard block navigation/Enter use the same block set, without duplicate stops on child paragraphs. Exact drag selection remains exact.
 
@@ -52,7 +52,7 @@ One pending selection and at most one active saved annotation exist. Selecting a
 
 All classification paths call the same state command. Pending selection takes precedence, then the active saved target; no target does nothing. Creation/relabel/deletion form one snapshot history. Undo/redo clears pending state before changing history; a fresh edit clears redo. Restoring valid payloads atomically replaces committed state, clears pending/active state, and starts a new empty history. Failed restore changes nothing.
 
-Swipe requires a separate gesture beginning on a pending highlight. Commit at horizontal release displacement >=60 CSS pixels and >=1.5 times vertical displacement. Under-threshold, vertical, canceled, or Escape-canceled gestures retain pending state and never commit. Preview represents the whole range in a fixed overlay; document layout stays unchanged. Native mouse selection and scoped keyboard selection share canonical anchors.
+Desktop labeling by scrolling ([plan 25](plans/25-ASSESSMENT-REMEDIATION.md) trigger rule, [18](plans/18-DESKTOP-HOVER-SCROLL-LABELING.md)): a passive `wheel` listener on the document surface labels the pending range only when no dialog is open, neither Ctrl nor Meta is held, `deltaX !== 0 && deltaY === 0`, and the event point lies inside one of the pending range's client rectangles, read at event time. It synchronizes the native range first and calls the shared `classify`: `deltaX < 0` assigns the left label, `> 0` the right. The event is never canceled, so native scrolling, zoom and navigation are untouched. The commit clears pending, so later events in the stream do nothing; saved annotations are never relabeled by scrolling. No timers, thresholds or rearm state; a late momentum event landing on a newly made selection labels it (open native-evidence item in 18). The plan 07 pointer-drag swipe is retired: a press on pending text starts native text selection, and pointer drags never label. Native mouse selection and scoped keyboard selection share canonical anchors.
 
 ## Public API and events
 
@@ -70,8 +70,9 @@ Both label groups exist, including empty ones. Sort by start, end, then ID. Spli
 
 ## Verification
 
-`npm test`: state, serialization, validation, history, restore, swipe boundaries, and static server request handling.
-`npm run test:browser`: real Chromium selection, rendering/sanitization, gestures, keyboard, lifecycle, file loading, and downloaded label payloads.
+`npm test`: state, serialization, validation, history, restore, styles/theme, file helpers, and static server request handling.
+`npm run test:browser`: Chromium, Firefox and WebKit selection, rendering/sanitization, wheel labeling and pointer drags, keyboard, lifecycle, file loading, and downloaded label payloads.
+`/tests/wheel-probe.html` (with `npm start`): plan 17 developer probe that tabulates wheel values over the pending range without labeling.
 `npm start`: local-only HTTP server at `http://127.0.0.1:4173`. No backend persistence or external requests.
 
 `npm run build`: the standalone offline app `dist/review.html`, self-contained ESM library `dist/review-lib.js`, and `dist/review.css`.
@@ -83,7 +84,7 @@ Visible shortcut hints and help expand the host's abstract `Mod` binding to **Cm
 
 ## Planned native-scroll and mobile interaction follow-up
 
-The present pointer implementation remains a prototype. Plans [17](plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md)–[20](plans/20-INPUT-UX-ACCEPTANCE.md) document the user-requested correction: desktop hover over pending text plus native horizontal scrolling; no dragged-text/handle requirement, no custom diagonal classifier, no vertical-to-horizontal conversion, no native scrolling/zoom/navigation suppression. Observe actual browser input/default behavior before selecting the minimum action and duplicate guard. Existing release-displacement thresholds apply only to the old pointer path. Mobile native text selection and touch classification need a separate prototype and actual iOS/Android proof. No public label/export/restore schema or setup UI is added by this planning work.
+Plans [17](plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md)–[20](plans/20-INPUT-UX-ACCEPTANCE.md) document the user-requested correction: desktop hover over pending text plus native horizontal scrolling; no dragged-text/handle requirement, no custom diagonal classifier, no vertical-to-horizontal conversion, no native scrolling/zoom/navigation suppression. The desktop rule above is implemented; the 17 first-use study and native trackpad/mouse evidence remain open. Mobile native text selection and touch classification need a separate prototype and actual iOS/Android proof. No public label/export/restore schema or setup UI is added by this planning work.
 
 ### Instance appearance
 

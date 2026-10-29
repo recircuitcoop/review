@@ -1,6 +1,6 @@
 # 07 — Swipe classification
 
-Status: original pointer prototype locally verified; desktop UX reopened by user feedback and mobile unverified. See [historical evidence](../CORE-COMPLETION.md) and new [plans 17–20](17-NATIVE-SCROLL-UX-PROTOTYPE.md). Native release coverage remains open in 13/20. Depends on: 05. Covers seed acceptance: 3, 4.
+Status: **retired** (2026-10-29, [25](25-ASSESSMENT-REMEDIATION.md) slice 3). The pointer-drag swipe, its thresholds and preview were removed; desktop labeling is native horizontal scrolling under [18](18-DESKTOP-HOVER-SCROLL-LABELING.md) and touch labeling is [19](19-MOBILE-NATIVE-SELECTION-AND-SWIPE.md) work. The record below is historical. Original pointer prototype was locally verified; desktop UX reopened by user feedback and mobile unverified. See [historical evidence](../CORE-COMPLETION.md) and new [plans 17–20](17-NATIVE-SCROLL-UX-PROTOTYPE.md). Native release coverage remains open in 13/20. Depends on: 05. Covers seed acceptance: 3, 4.
 Seed: [selection and gesture contract](../../selection-swipe-library.md#selection-and-gesture-contract).
 
 ## Outcome

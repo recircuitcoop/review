@@ -1,6 +1,6 @@
 # 17 — Native scrolling and first-use UX
 
-Status: probe fixture being added under [25](25-ASSESSMENT-REMEDIATION.md); first-use study and native-device evidence **open**. Date: 2026-10-20. On 2026-10-29 the user directed 18 to proceed ahead of this gate; the gate still governs any discoverability or native-acceptance claim.
+Status: probe fixture available (`npm start`, then `/tests/wheel-probe.html`) under [25](25-ASSESSMENT-REMEDIATION.md); first-use study and native-device evidence **open**. Date: 2026-10-20. On 2026-10-29 the user directed 18 to proceed ahead of this gate; the gate still governs any discoverability or native-acceptance claim.
 
 ## Outcome
 
@@ -29,6 +29,8 @@ Use a developer fixture, not new setup/configuration controls inside the mounted
 - An ordinary vertical mouse wheel may provide no horizontal input. Buttons remain available; test tilt wheels/Shift-scroll only where the browser actually emits horizontal input. Do not synthesize it.
 - Record natural-scrolling preferences and whether the shown direction matches the user's expectation. Do not add an app-level inversion setting without evidence.
 - Observe momentum, repeated events, pointer exit, changed selection and navigation. Browsers do not provide a portable semantic wheel-gesture-end event; do not invent a pause/release contract or timing value in advance.
+
+The probe page mounts the library on the review fixture and tabulates each wheel event's `deltaX`, `deltaY`, `deltaMode`, Ctrl/Meta/Shift, `cancelable`, whether it was over the pending range and whether it meets the plan 25 pure-horizontal rule. A capturing window listener stops propagation so the annotator never labels during probing; it never calls `preventDefault()`, records no document text and sends nothing.
 
 Proposed instruction: **“Hover over selected text and scroll left or right to label it.”** Show **← [configured left label] / [configured right label] →** and **“You can also choose a label button.”** This is proposed copy for testing, not claimed validated UX.
 

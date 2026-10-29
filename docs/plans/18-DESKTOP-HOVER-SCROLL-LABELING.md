@@ -1,6 +1,6 @@
 # 18 — Desktop hover and horizontal scroll
 
-Status: implementation under [25](25-ASSESSMENT-REMEDIATION.md) (user-directed, ahead of 17's study), with the trigger rule recorded there; native desktop acceptance open. Depends on: 17. Reopens desktop gesture UX from 07; verification feeds 13 and 20.
+Status: implemented under [25](25-ASSESSMENT-REMEDIATION.md) slice 3 (user-directed, ahead of 17's study), with the trigger rule recorded there; native desktop acceptance open. Depends on: 17. Reopens desktop gesture UX from 07; verification feeds 13 and 20.
 
 ## Outcome
 
@@ -18,14 +18,21 @@ A native horizontal scroll while hovering pending selected text assigns the conf
 
 ## Small implementation boundary
 
-Existing `src/review.js` owns scoped input/hit testing and feedback; `ReviewSession` remains the only committed-state/history owner. Reuse `src/text.js` anchors. Keep `src/gesture.js` pointer behavior separate from native wheel behavior. No gesture dependency or new host label/export schema/configuration is needed.
+`src/pointer.js` owns document-surface pointer input: click-to-select, saved-highlight activation, the overlap chooser and the passive `wheel` listener that applies the trigger rule, with pending rectangles re-read at event time. `src/review.js` composes it and owns the shared `classify` path; `ReviewSession` remains the only committed-state/history owner. Reuse `src/text.js` anchors. The pointer-drag swipe (`src/gesture.js`, preview overlay, `touch-action: pan-y`) is removed. No gesture dependency or new host label/export schema/configuration is needed.
 
 ## Proof
 
 Regression cases: native left/right; repeated events; no pending/saved-only/outside hit; pure vertical input; mixed axes/default behavior; zoom chords; unsupported mouse wheel; selection change; late momentum/new selection; native exact drag across formatting; Undo/Redo; both themes; reduced motion; embedding in a scrollable host. Use browser integration plus the actual devices in 20. Synthetic wheel events alone do not establish OS delivery or default scrolling.
 
+## Implementation record (2026-10-29)
+
+- Trigger: passive `wheel` on the document surface. Labels only with a pending range, no open dialog, no Ctrl/Meta, `deltaX !== 0 && deltaY === 0`, and the event point inside a current pending client rectangle. The native range is synchronized first; `deltaX < 0` → left label, `> 0` → right, through `classify`. No timers, thresholds or rearm state; the event is never canceled.
+- Browser regressions (`tests/browser-check.js`, dispatched `WheelEvent`s, Chromium/Firefox/WebKit): pure left/right label once with the right label and exact quote; repeated and reversed events after commit do nothing and never relabel; vertical, mixed-axis, Ctrl, Meta, outside-rectangle, no-pending, saved-only (active) and dialog-open events never label; no event is `defaultPrevented`; a pointer press on pending text is not canceled, captured or previewed and a following release never labels. `tests/review.spec.js` adds a real Playwright mouse drag starting on pending text (native selection changes, no annotation) and Playwright-generated wheel input (vertical ignored, horizontal labels once). These are browser-level synthetic events; they do not establish OS delivery, trackpad momentum or default scrolling.
+- Known native-evidence limitation, **not a pass claim**: a late event from an old momentum stream that lands on a *newly* made pending selection labels that new range. Portable APIs cannot tell it from a fresh gesture; the browser check *Known limitation: a late wheel event after a new selection labels that new range* pins current behavior. Native trackpad evidence (17) decides whether a guard is needed.
+- Developer probe for 17: `npm start`, then open `/tests/wheel-probe.html`.
+
 ## Done
 
-- [ ] Relevant failures demonstrated before the scoped change; sequence/DOM tests pass.
+- [x] Relevant failures demonstrated before the scoped change; sequence/DOM tests pass.
 - [ ] Native desktop acceptance and unchanged annotation/export invariants recorded.
-- [ ] Help/usage/verification updated; rebuilt app/library; 13 remains open where proof is missing.
+- [ ] Help/usage/verification updated; rebuilt app/library; 13 remains open where proof is missing. (Status copy, README, IMPLEMENTATION and rebuilt `dist/` done; `docs/VERIFICATION.md` is plan 25 slice 5; the whisper/help surface is slice 4.)

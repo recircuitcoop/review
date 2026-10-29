@@ -31,7 +31,7 @@ Two new regressions were observed failing before product fixes: a nonempty nativ
 
 ## Trusted desktop input
 
-Reproduce with `npm run test:page`, then open `test-results/pointer-check.html`. Select a scenario and drag from the highlighted text itself, avoiding gaps between its line rectangles. The probe observes trusted events and the actual preview, layout, committed count and pending quote.
+Historical: the pointer swipe and `tests/pointer-check.js` were retired on 2026-10-29 ([plan 25](plans/25-ASSESSMENT-REMEDIATION.md) slice 3), so this probe no longer exists. It was reproduced with `npm run test:page`, then `test-results/pointer-check.html`. Select a scenario and drag from the highlighted text itself, avoiding gaps between its line rectangles. The probe observes trusted events and the actual preview, layout, committed count and pending quote.
 
 Observed in Chromium on macOS:
 
