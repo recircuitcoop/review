@@ -89,7 +89,7 @@ Keyboard selection uses the same range model and commit path as mouse selection.
 
 In precise text-selection mode, ordinary arrow keys move the caret and Shift+Arrow extends the range; they never classify text. The library supplies scoped caret navigation rather than requiring users to enable browser-wide caret browsing. Selection can extend across supported document blocks. Leaving the mode with F2 retains the current nonempty range; Escape cancels it.
 
-When a menu or dialog is open, its navigation takes priority. Escape first closes that surface (or cancels an active swipe) and only a subsequent Escape clears the underlying selection. Destructive commands act only on an explicitly active target; with no target, Delete and Backspace do nothing inside the document surface and do not navigate browser history.
+When a menu or dialog is open, its navigation takes priority. Escape first closes that surface and only a subsequent Escape clears the underlying selection. Destructive commands act only on an explicitly active target; with no target, Delete and Backspace do nothing inside the document surface and do not navigate browser history.
 
 Do not intercept shortcuts in editable fields, host application controls, or during IME composition. Prevent browser defaults only when handling an applicable annotator command. Hosts may remap conflicting shortcuts; controls and help must display the effective mapping. Verify the default mapping on supported browsers and operating systems before release.
 
@@ -119,8 +119,8 @@ Both appearances cover document text, code blocks, controls, dialogs, previews, 
 
 - Clicking a committed highlight selects that annotation for relabeling or deletion; it takes precedence over selecting the containing paragraph.
 - Beginning a new selection replaces the previous pending selection without committing it.
-- When a swipe is canceled, the pending selection stays active.
-- Overlapping committed selections are supported. Each retains its own range and label. A newly selected range takes precedence as the active swipe target. Clicking overlapping saved highlights opens a keyboard-accessible chooser for the annotation to edit; it never labels or deletes multiple annotations implicitly.
+- Scrolling that does not qualify as labeling input leaves the pending selection active.
+- Overlapping committed selections are supported. Each retains its own range and label. A newly selected range takes precedence as the horizontal-scroll labeling target. Clicking overlapping saved highlights opens a keyboard-accessible chooser for the annotation to edit; it never labels or deletes multiple annotations implicitly.
 - Links inside the annotation surface do not navigate on ordinary selection clicks. The host may provide a separate way to open links.
 
 These defaults complete the initial interaction contract. Local behavior validation covers replacement, saved-highlight precedence, the overlap chooser, canceled-swipe retention, and link-click suppression; see [core completion evidence](docs/CORE-COMPLETION.md). They remain proposed UX defaults rather than claimed user usability approval.
