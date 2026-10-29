@@ -1,6 +1,6 @@
 # 25 — Assessment remediation
 
-Status: in progress. Date: 2026-10-29. Branch: `fix/assessment-remediation`.
+Status: complete; native-input, mobile and assistive-technology gates remain open (see below). Date: 2026-10-29. Branch: `fix/assessment-remediation`.
 
 A project assessment found a spec/code conflict, unbuilt planned interaction (17/18) and widget design (23), unverified CI on the current head, an unreadable controller module, small behavior defects and stale verification records. The user directed: **keep the separate Export button**, resolve the remaining issues now, and land the result.
 
@@ -42,4 +42,4 @@ A project assessment found a spec/code conflict, unbuilt planned interaction (17
 - [x] 3 Native horizontal labeling
 - [x] 4 Widget UI
 - [x] 5 Records (Codebase Memory indexing remained blocked: `index worker could not start: active daemon coordination could not be verified safely`)
-- [ ] 6 Land
+- [x] 6 Land (PR #1; CI run 40967319567 nine/nine green)
