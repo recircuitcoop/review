@@ -1,4 +1,7 @@
 const copy = value => structuredClone(value);
+// Annotation records are never mutated: edits build new records and arrays.
+// Freezing enforces that, so undo/redo history can hold arrays by reference.
+const freeze = record => Object.freeze(record);
 const compare = (a, b) => a.start - b.start || a.end - b.end || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const requiredString = value => typeof value === 'string' && value.trim().length > 0;
 
@@ -62,7 +65,8 @@ export class ReviewSession {
 
   #commit(next) {
     const previous = this.#annotations;
-    this.#undo.push(copy(previous)); this.#redo = [];
+    this.#undo.push(previous);
+    this.#redo = [];
     this.#annotations = next;
     this.#revision++;
     this.#changes(previous, next);
@@ -80,7 +84,7 @@ export class ReviewSession {
   classify(labelId) {
     if (!this.#labels.some(l => l.id === labelId)) throw new Error('Unknown label ID.');
     if (this.#pending) {
-      const annotation = { id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...this.#pending };
+      const annotation = freeze({ id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...this.#pending });
       this.#pending = null; this.#activeId = null;
       this.#commit([...this.#annotations, annotation]);
       this.clear();
@@ -95,7 +99,7 @@ export class ReviewSession {
     if (!target) throw new Error('Unknown annotation ID.');
     if (!this.#labels.some(l => l.id === labelId)) throw new Error('Unknown label ID.');
     if (target.labelId === labelId) return copy(target);
-    this.#commit(this.#annotations.map(a => a.id === id ? { ...a, labelId } : a));
+    this.#commit(this.#annotations.map(a => a.id === id ? freeze({ ...a, labelId }) : a));
     return copy(this.#annotations.find(a => a.id === id));
   }
 
@@ -109,7 +113,8 @@ export class ReviewSession {
     this.clear();
     if (!from.length) return false;
     const previous = this.#annotations;
-    to.push(copy(previous)); this.#annotations = from.pop();
+    to.push(previous);
+    this.#annotations = from.pop();
     this.#revision++;
     this.#changes(previous, this.#annotations);
     return true;
@@ -142,7 +147,7 @@ export class ReviewSession {
           const anchor = this.anchor(a.start, a.end);
           for (const field of ['quote', 'prefix', 'suffix']) if (a[field] !== anchor[field]) throw new Error(`Annotation ${a.id}: ${field} does not match its positions.`);
           ids.add(a.id);
-          annotations.push({ id: a.id, documentId: a.documentId, documentVersion: a.documentVersion, labelId, ...anchor });
+          annotations.push(freeze({ id: a.id, documentId: a.documentId, documentVersion: a.documentVersion, labelId, ...anchor }));
         }
       }
     }

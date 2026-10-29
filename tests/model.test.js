@@ -115,6 +115,29 @@ test('creation observers see committed state with no pending selection', () => {
   assert.deepEqual(observed, { pending: null, count: 1 });
 });
 
+test('history keeps annotation arrays by reference; public reads stay detached copies', () => {
+  const s = session();
+  s.select(0, 5); s.classify('accept');
+  s.select(6, 8); s.classify('reject');
+  const [first, second] = s.read();
+  // Records are immutable, so commits and undo/redo must not deep-copy the annotation array.
+  const clone = globalThis.structuredClone;
+  const clonedArrays = [];
+  globalThis.structuredClone = value => { if (Array.isArray(value)) clonedArrays.push(value); return clone(value); };
+  try {
+    s.select(9, 14); s.classify('accept');
+    s.activate(first.id); s.classify('reject');
+    s.delete(second.id);
+    s.undo(); s.redo(); s.undo();
+  } finally { globalThis.structuredClone = clone; }
+  assert.equal(clonedArrays.length, 0);
+  const read = s.read();
+  read[0].quote = 'tampered'; read.pop();
+  assert.equal(s.read().length, 3);
+  assert.equal(s.read()[0].quote, 'Hello');
+  assert.equal(s.export().selections.reject[0].quote, 'Hello');
+});
+
 test('actual browser-downloaded label fixtures retain quotes and restore together', () => {
   const payloads = ['left', 'right'].map(label => JSON.parse(readFileSync(new URL(`./artifacts/browser-${label}.json`, import.meta.url), 'utf8')));
   const first = payloads[0];
