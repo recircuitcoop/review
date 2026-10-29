@@ -378,10 +378,7 @@ export function mountReview(container, options) {
     button.type = 'button';
     button.dataset.command = name;
     button.title = `${title} (${shortcuts.display[name].join(' / ')})`;
-    const aria = shortcuts.effective[name].join(' ')
-      .replace(/\bmod\b/gi, /Mac/.test(navigator.platform) ? 'Meta' : 'Control')
-      .replace(/\bctrl\b/gi, 'Control');
-    button.setAttribute('aria-keyshortcuts', aria);
+    button.setAttribute('aria-keyshortcuts', shortcuts.aria[name]);
     toolbar.append(button);
   }
   listen(toolbar, 'click', event => {
@@ -443,7 +440,7 @@ export function mountReview(container, options) {
     const backward = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
     const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown';
     // Word steps use Alt on macOS and Ctrl elsewhere, like native text fields.
-    const byWord = /Mac/.test(navigator.platform) ? event.altKey : event.ctrlKey;
+    const byWord = shortcuts.mac ? event.altKey : event.ctrlKey;
     const granularity = byWord ? 'word' : vertical ? 'line' : 'character';
     selection.modify(event.shiftKey ? 'extend' : 'move', backward ? 'backward' : 'forward', granularity);
     const escaped = !surface.contains(selection.anchorNode) || !surface.contains(selection.focusNode);

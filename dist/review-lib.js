@@ -384,8 +384,15 @@ function eventChord(event) {
 function displayChord(chord, mac) {
   return chord.replace(/\bmod\b/gi, mac ? "Cmd" : "Ctrl").replace(/\bmeta\b/gi, mac ? "Cmd" : "Meta");
 }
+function isApplePlatform() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || "";
+  return /^(mac|iphone|ipad|ios)/i.test(platform);
+}
+function ariaChords(keys, mac) {
+  return keys.join(" ").replace(/\bmod\b/gi, mac ? "Meta" : "Control").replace(/\bctrl\b/gi, "Control");
+}
 function shortcutMap(overrides = {}) {
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const mac = isApplePlatform();
   const effective = structuredClone(DEFAULT_SHORTCUTS);
   if (mac) {
     effective.redo = ["Mod+Shift+Z"];
@@ -402,12 +409,16 @@ function shortcutMap(overrides = {}) {
     }
   }
   const display = {};
+  const aria = {};
   for (const [command, keys] of Object.entries(effective)) {
     display[command] = keys.map((key) => displayChord(key, mac));
+    aria[command] = ariaChords(keys, mac);
   }
   return {
     effective,
     display,
+    aria,
+    mac,
     command(event) {
       return bindings.get(eventChord(event));
     }
@@ -3207,8 +3218,7 @@ function mountReview(container, options) {
     button.type = "button";
     button.dataset.command = name;
     button.title = `${title} (${shortcuts.display[name].join(" / ")})`;
-    const aria = shortcuts.effective[name].join(" ").replace(/\bmod\b/gi, /Mac/.test(navigator.platform) ? "Meta" : "Control").replace(/\bctrl\b/gi, "Control");
-    button.setAttribute("aria-keyshortcuts", aria);
+    button.setAttribute("aria-keyshortcuts", shortcuts.aria[name]);
     toolbar.append(button);
   }
   listen(toolbar, "click", (event) => {
@@ -3262,7 +3272,7 @@ function mountReview(container, options) {
     const previous = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
     const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
     const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
-    const byWord = /Mac/.test(navigator.platform) ? event.altKey : event.ctrlKey;
+    const byWord = shortcuts.mac ? event.altKey : event.ctrlKey;
     const granularity = byWord ? "word" : vertical ? "line" : "character";
     selection.modify(event.shiftKey ? "extend" : "move", backward ? "backward" : "forward", granularity);
     const escaped = !surface.contains(selection.anchorNode) || !surface.contains(selection.focusNode);

@@ -31,7 +31,7 @@ test('unavailable preference storage still permits theming, loading and export',
 test('all core acceptance checks pass on this browser and operating system', async ({ page, browser, browserName }) => {
   console.info(`Acceptance environment: ${process.platform}; ${browserName} ${browser.version()}; Node ${process.version}`);
   await page.goto('/tests/browser-check.html');
-  await expect(page.locator('#summary')).toHaveText('PASS: 31/31 real-browser checks');
+  await expect(page.locator('#summary')).toHaveText('PASS: 32/32 real-browser checks');
 });
 
 for (const format of ['grouped', 'split']) {

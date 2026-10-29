@@ -62,7 +62,11 @@ test('clicks select list items and code blocks; keyboard navigation reaches both
 
 for (const platform of ['Win32', 'Linux x86_64', 'MacIntel']) {
   test(`modifier routing for ${platform} (simulated platform detection)`, async ({ page }) => {
-    await page.addInitScript(value => Object.defineProperty(navigator, 'platform', { configurable: true, value }), platform);
+    // userAgentData is cleared so detection falls back to the simulated navigator.platform.
+    await page.addInitScript(value => {
+      Object.defineProperty(navigator, 'platform', { configurable: true, value });
+      Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: undefined });
+    }, platform);
     await page.goto('/tests/fixture.html'); await page.waitForFunction(() => window.review);
     await page.locator('.review-document li').first().click();
     await page.getByRole('button', { name: 'Accept', exact: true }).click();

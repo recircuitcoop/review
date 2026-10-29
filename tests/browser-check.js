@@ -19,6 +19,13 @@ const pointerClick = target => {
   target.dispatchEvent(new PointerEvent('pointerdown', init));
   target.dispatchEvent(new PointerEvent('pointerup', init));
 };
+// Simulate both platform sources; userAgentData undefined exercises the navigator.platform fallback.
+function simulatePlatform(platform, userAgentPlatform) {
+  Object.defineProperty(navigator, 'platform', { configurable: true, value: platform });
+  Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: userAgentPlatform === undefined ? undefined : { platform: userAgentPlatform } });
+}
+// The real values live on Navigator.prototype, so deleting the own overrides restores them.
+function restorePlatform() { delete navigator.platform; delete navigator.userAgentData; }
 async function check(name, run) {
   try { await run(); results.push({ name, passed: true }); }
   catch (error) { results.push({ name, passed: false, error: error.message }); }
@@ -115,10 +122,9 @@ await check('Effective shortcut remapping updates dispatch, hints, and help with
   container.querySelector('dialog').close(); review.destroy(); container.remove();
 });
 await check('Windows, Linux, and macOS modifier routing supports undo, both redo variants, and scoped export', async () => {
-  const original = Object.getOwnPropertyDescriptor(navigator, 'platform');
   try {
     for (const platform of ['Win32', 'Linux x86_64', 'MacIntel']) {
-      Object.defineProperty(navigator, 'platform', { configurable: true, value: platform });
+      simulatePlatform(platform);
       const { container, review } = mount();
       try {
         const surface = container.querySelector('.review-document');
@@ -138,7 +144,7 @@ await check('Windows, Linux, and macOS modifier routing supports undo, both redo
         await tick();
       } finally { review.destroy(); container.remove(); }
     }
-  } finally { if (original) Object.defineProperty(navigator, 'platform', original); else delete navigator.platform; }
+  } finally { restorePlatform(); }
 });
 await check('Invalid mount/shortcut options fail before changing host content', () => {
   const container = document.createElement('div'); container.textContent = 'host'; document.querySelector('#fixtures').append(container);
@@ -398,10 +404,9 @@ await check('Swipe controller handles final displacement, duplicate release, can
 });
 
 await check('All displayed shortcut hints and help use Cmd on Mac and Ctrl elsewhere, including remapping', () => {
-  const original = Object.getOwnPropertyDescriptor(navigator, 'platform');
   try {
     for (const platform of ['MacIntel', 'Win32', 'Linux x86_64']) {
-      Object.defineProperty(navigator, 'platform', { configurable: true, value: platform });
+      simulatePlatform(platform);
       const { container, review } = mount({ shortcuts: { undo: 'mod+Q' } });
       try {
         const modifier = platform === 'MacIntel' ? 'Cmd' : 'Ctrl';
@@ -416,7 +421,27 @@ await check('All displayed shortcut hints and help use Cmd on Mac and Ctrl elsew
         assert(!help.textContent.includes('Mod+'), `${platform} help exposes Mod`);
       } finally { review.destroy(); container.remove(); }
     }
-  } finally { if (original) Object.defineProperty(navigator, 'platform', original); else delete navigator.platform; }
+  } finally { restorePlatform(); }
+});
+
+await check('Platform detection prefers userAgentData, falls back to navigator.platform, and drives every Mod site', () => {
+  try {
+    // [navigator.platform, userAgentData.platform, expected Apple]
+    for (const [platform, userAgentPlatform, apple] of [['', 'macOS', true], ['iPad', undefined, true], ['MacIntel', 'Windows', false]]) {
+      simulatePlatform(platform, userAgentPlatform);
+      const { container, review } = mount();
+      try {
+        const undo = container.querySelector('[data-command="undo"]');
+        const scenario = `${platform || '(empty)'}/${userAgentPlatform ?? '(none)'}`;
+        assert(undo.title.includes(`${apple ? 'Cmd' : 'Ctrl'}+Z`), `${scenario} tooltip: ${undo.title}`);
+        equal(undo.getAttribute('aria-keyshortcuts'), `${apple ? 'Meta' : 'Control'}+Z`, `${scenario} aria-keyshortcuts`);
+        const p = container.querySelector('.review-document p'); p.focus(); key(p, 'F2');
+        key(p, 'ArrowRight', { shiftKey: true, ...(apple ? { altKey: true } : { ctrlKey: true }) });
+        key(p, 'F2'); click(container, 'right');
+        equal(review.read()[0]?.quote.trim(), 'One', `${scenario} word selection`);
+      } finally { review.destroy(); container.remove(); }
+    }
+  } finally { restorePlatform(); }
 });
 
 const failed = results.filter(r => !r.passed).length;

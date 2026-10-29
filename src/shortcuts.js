@@ -64,11 +64,27 @@ function displayChord(chord, mac) {
 }
 
 /**
+ * Apple keyboard conventions (Cmd for Mod, Alt for word steps).
+ * Prefers User-Agent Client Hints; navigator.platform covers engines without them.
+ */
+export function isApplePlatform() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || '';
+  return /^(mac|iphone|ipad|ios)/i.test(platform);
+}
+
+/** aria-keyshortcuts names modifiers by their DOM key values (Meta, Control). */
+function ariaChords(keys, mac) {
+  return keys.join(' ')
+    .replace(/\bmod\b/gi, mac ? 'Meta' : 'Control')
+    .replace(/\bctrl\b/gi, 'Control');
+}
+
+/**
  * Resolve host overrides against the defaults and build the dispatcher.
  * Throws before mounting on unknown commands, malformed chords, or conflicts.
  */
 export function shortcutMap(overrides = {}) {
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const mac = isApplePlatform();
   const effective = structuredClone(DEFAULT_SHORTCUTS);
   // Ctrl+Y redo is a Windows/Linux convention only.
   if (mac) {
@@ -88,13 +104,17 @@ export function shortcutMap(overrides = {}) {
   }
 
   const display = {};
+  const aria = {};
   for (const [command, keys] of Object.entries(effective)) {
     display[command] = keys.map(key => displayChord(key, mac));
+    aria[command] = ariaChords(keys, mac);
   }
 
   return {
     effective,
     display,
+    aria,
+    mac,
     command(event) {
       return bindings.get(eventChord(event));
     },
