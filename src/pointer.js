@@ -1,5 +1,9 @@
 import { selectableBlock } from './render.js';
 
+// Implementation tuning (plan 26): wheel events of one swipe or momentum stream arrive about a
+// frame apart, far inside this gap; a deliberate new select-then-swipe takes longer.
+const CONTINUATION_GAP_MS = 200;
+
 /**
  * Pointer-device input on the document surface: click-to-select blocks, clicks on
  * saved highlights, and native horizontal scrolling over the pending range.
@@ -11,6 +15,8 @@ export function installPointerInput(ctx) {
   const { surface, text, state, left, right, dialogs, listen, safe } = ctx;
   // The primary press in progress, kept only to tell a click from a drag on release.
   let press = null;
+  // When the last wheel event of a labeling gesture was canceled.
+  let lastCanceled = -Infinity;
 
   function pointAt(x, y) {
     const point = document.caretPositionFromPoint?.(x, y);
@@ -74,14 +80,22 @@ export function installPointerInput(ctx) {
     ctx.syncSelection();
   });
 
-  // Plan 25 trigger rule: browser-reported pure horizontal scrolling over the pending
-  // highlight labels it once. Passive and never canceled, so native scrolling, zoom and
-  // navigation stay untouched. A commit clears pending, so the rest of the stream does nothing.
+  // Plan 25 trigger rule with plan 26 cancellation: browser-reported pure horizontal scrolling
+  // over the pending range labels it once. That event and the rest of its
+  // gesture are canceled so the browser's back/forward history swipe cannot also run.
+  // Everything else (vertical, mixed, zoom, unrelated horizontal) is left to the browser.
   listen(surface, 'wheel', event => safe(() => {
     // Mixed-axis input fails closed; no axis ratio or thresholds.
     if (event.deltaX === 0 || event.deltaY !== 0) return;
     // Ctrl/Meta wheel is a zoom chord.
     if (event.ctrlKey || event.metaKey) return;
+    // The rest of a gesture that already labeled: cancel it, never commit again, so late
+    // momentum cannot label a selection made after the commit.
+    if (event.timeStamp - lastCanceled < CONTINUATION_GAP_MS) {
+      event.preventDefault();
+      lastCanceled = event.timeStamp;
+      return;
+    }
     if (dialogs.isOpen) return;
     // Mirror any native range first so the hit test uses the current pending target.
     ctx.syncSelection();
@@ -89,6 +103,8 @@ export function installPointerInput(ctx) {
     // Without a pending range classify would relabel an active saved annotation; wheel never does.
     if (!pending) return;
     if (!hitRange(pending, event.clientX, event.clientY)) return;
+    event.preventDefault();
+    lastCanceled = event.timeStamp;
     ctx.classify(event.deltaX < 0 ? left : right);
-  }), { passive: true });
+  }), { passive: false });
 }
