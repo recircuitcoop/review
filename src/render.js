@@ -17,6 +17,33 @@ export function selectableBlock(target) {
   return target.closest('li,pre') ?? target.closest(BLOCK_SELECTOR);
 }
 
+/**
+ * The canonical range a click or Enter on `block` selects, plus the elements it covers (the swipe
+ * hit area). A heading takes its section, up to the next heading of the same or higher rank; a
+ * list item takes its nested hierarchy.
+ */
+export function blockScope(surface, text, block) {
+  const contents = document.createRange();
+  contents.selectNodeContents(block);
+  const { start, end } = text.fromRange(contents);
+  const level = Number(/^H([1-6])$/.exec(block.tagName)?.[1]);
+  if (level) {
+    const next = [...surface.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+      .find(h => block.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING && Number(h.tagName[1]) <= level);
+    // The heading and its following siblings, up to the one that is or holds the next heading.
+    const elements = [block];
+    for (let node = block.nextElementSibling; node && !(next && node.contains(next)); node = node.nextElementSibling) elements.push(node);
+    if (!next) return { start, end: text.text.length, elements };
+    // The section ends with the last rendered content before the next heading element.
+    const section = document.createRange();
+    section.setStart(contents.startContainer, contents.startOffset);
+    section.setEndBefore(next);
+    return { start, end: text.contentEnd(text.fromRange(section).end), elements };
+  }
+  // Nested blocks close with their own separators inside the item; the range ends on content.
+  return { start, end: text.contentEnd(end), elements: [block] };
+}
+
 /** Render sanitized Markdown into the surface and return its keyboard-focusable blocks in document order. */
 export function renderMarkdown(surface, markdown) {
   const html = marked.parse(markdown, { gfm: false });
@@ -49,15 +76,14 @@ export function highlightStyle(names) {
   ].join(' ');
 }
 
-/** Replace all four highlight sets from committed state; highlights never touch the document DOM. */
+/** Replace all four highlight sets from session state (`pending` lists every pending range); highlights never touch the document DOM. */
 export function paintHighlights({ names, text, labels, annotations, pending, active }) {
   for (const direction of ['left', 'right']) {
     const label = labels.find(l => l.direction === direction);
     const ranges = annotations.filter(a => a.labelId === label.id).map(a => text.range(a.start, a.end));
     CSS.highlights.set(names[direction], new Highlight(...ranges));
   }
-  const pendingRanges = pending ? [text.range(pending.start, pending.end)] : [];
-  CSS.highlights.set(names.pending, new Highlight(...pendingRanges));
+  CSS.highlights.set(names.pending, new Highlight(...pending.map(p => text.range(p.start, p.end))));
   const activeRanges = active ? [text.range(active.start, active.end)] : [];
   CSS.highlights.set(names.active, new Highlight(...activeRanges));
 }
@@ -75,37 +101,33 @@ export function icon(name) {
   return holder.firstChild;
 }
 
-// Approved spacing: the whisper sits 14px below its block and keeps 26px before the next one.
-const WHISPER_GAP_ABOVE = 14;
-const WHISPER_GAP_BELOW = 26;
-// The document block currently reserving room for each whisper.
-const reservedBlocks = new WeakMap();
+// The document block each whisper is currently laid under.
+const anchoredBlocks = new WeakMap();
 
 /**
- * Lay the whisper over room reserved below `block` (null releases it). The whisper is an
- * overlay outside the document, so caret movement and selection never enter it; only the
- * block's bottom margin grows, so the passage itself never moves.
+ * Lay the whisper over the existing spacing below `block` (null forgets it). It is an
+ * overlay outside the document, so caret movement and selection never enter it, and it
+ * never changes any block's size or margin, so document text never moves for it. The
+ * uniform block spacing (`paragraphSpacing`) is sized to hold one whisper line.
  */
 export function placeWhisper(whisper, layout, block) {
-  const previous = reservedBlocks.get(whisper);
-  if (previous && previous !== block) previous.style.marginBottom = '';
   if (!block) {
-    reservedBlocks.delete(whisper);
+    anchoredBlocks.delete(whisper);
     return;
   }
-  reservedBlocks.set(whisper, block);
+  anchoredBlocks.set(whisper, block);
   const origin = layout.getBoundingClientRect();
   const rect = block.getBoundingClientRect();
-  // Width first: long label names wrap, and the reserved room follows the real height.
+  // Width first: long label names wrap, and the centring below follows the real height.
   whisper.style.left = `${rect.left - origin.left}px`;
   whisper.style.width = `${rect.width}px`;
-  whisper.style.top = `${rect.bottom - origin.top + WHISPER_GAP_ABOVE}px`;
-  block.style.marginBottom = `${WHISPER_GAP_ABOVE + whisper.offsetHeight + WHISPER_GAP_BELOW}px`;
+  const room = parseFloat(getComputedStyle(block).marginBottom) || 0;
+  whisper.style.top = `${rect.bottom - origin.top + Math.max(0, (room - whisper.offsetHeight) / 2)}px`;
 }
 
 /** Re-lay the whisper after reflow (resize, fonts); offsets never depend on this. */
 export function repositionWhisper(whisper, layout) {
-  const block = reservedBlocks.get(whisper);
+  const block = anchoredBlocks.get(whisper);
   if (block && !whisper.hidden) placeWhisper(whisper, layout, block);
 }
 
@@ -173,8 +195,8 @@ export function paintWhisper({ whisper, layout, surface, text, labels, annotatio
     anchor = end.nodeType === Node.TEXT_NODE ? end.parentElement : end;
   }
   // During a pointer press the placement holds still, so a drag never moves text under the pointer.
-  if (held && reservedBlocks.has(whisper)) {
-    placeWhisper(whisper, layout, reservedBlocks.get(whisper));
+  if (held && anchoredBlocks.has(whisper)) {
+    placeWhisper(whisper, layout, anchoredBlocks.get(whisper));
     return;
   }
   const block = anchor ? selectableBlock(anchor) : null;

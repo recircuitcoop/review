@@ -111,8 +111,9 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 /* Done keeps the strongest emphasis and a fixed place at the end of the row. */
 .review .review-finish { flex: none; min-width: 60px; padding: 8px 14px; font-weight: 500; background: var(--review-primary); color: var(--review-on-primary); border-color: var(--review-primary); }
 .review .review-finish:hover { background: var(--review-primary-hover); }
-/* Whisper: passive state row below the target passage. Generated text only, never a click target. */
-.review-whisper { position: absolute; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 24px; margin: 0; font-family: var(--review-font-family); font-size: var(--review-small-size); line-height: var(--review-line-height); color: var(--review-muted); pointer-events: none; }
+/* Whisper: passive state row overlaid on the spacing below the target passage; it never changes document layout.
+   Generated text only, never a click target. The paper background keeps a wrapped row legible over the next line. */
+.review-whisper { position: absolute; background: var(--review-panel); display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 24px; margin: 0; font-family: var(--review-font-family); font-size: var(--review-small-size); line-height: var(--review-line-height); color: var(--review-muted); pointer-events: none; }
 .review-whisper [data-text]::before { content: attr(data-text); }
 .review-whisper-state { text-align: center; white-space: pre; letter-spacing: -.01em; }
 .review-whisper-end { min-width: 0; overflow-wrap: anywhere; }
@@ -126,7 +127,10 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review-document { font-family: var(--review-document-font); font-size: var(--review-document-size); line-height: var(--review-document-line-height); padding: var(--review-document-padding); min-height: 25rem; overflow-wrap: anywhere; }
 .review-document :is(h1, h2, h3, h4, h5, h6) { font-family: var(--review-heading-font); letter-spacing: var(--review-heading-spacing); line-height: var(--review-heading-line-height); }
 .review-document h1 { font-size: var(--review-heading-size); }
+/* Paragraphs and code blocks, the usual whisper anchors, keep a bottom spacing that holds one whisper line.
+   Headings, lists and quotes keep their native spacing; a whisper there overlays the next line (opaque, inert). */
 .review-document p { margin: 0 0 var(--review-paragraph-spacing); }
+.review-document pre { margin-bottom: var(--review-paragraph-spacing); }
 .review-document a { color: var(--review-link); text-decoration-style: dotted; }
 .review-document pre { background: var(--review-code); padding: var(--review-code-padding); overflow: auto; line-height: var(--review-code-line-height); border-radius: var(--review-code-radius); white-space: pre-wrap; }
 .review-document code { font-family: var(--review-code-font); font-size: var(--review-code-size); line-height: var(--review-code-line-height); }

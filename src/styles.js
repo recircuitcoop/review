@@ -67,7 +67,7 @@ const tokens = {
   toolbarPadding: ['--review-toolbar-padding', 'padding', '9px 18px'],
   toolbarGap: ['--review-toolbar-gap', 'gap', '8px'],
   buttonPadding: ['--review-button-padding', 'padding', '7px 9px'],
-  paragraphSpacing: ['--review-paragraph-spacing', 'margin-bottom', '24px'],
+  paragraphSpacing: ['--review-paragraph-spacing', 'margin-bottom', '32px'],
   codePadding: ['--review-code-padding', 'padding', '16px 18px'],
   dialogPadding: ['--review-dialog-padding', 'padding', '22px'],
   sidebarPadding: ['--review-sidebar-padding', 'padding', '16px'],

@@ -59,5 +59,7 @@ export function canonicalText(root) {
       return range;
     },
     fromRange(range) { return { start: offset(range.startContainer, range.startOffset), end: offset(range.endContainer, range.endOffset) }; },
+    /** The end of the last rendered content (text or line break, never a block separator) at or before `position`. */
+    contentEnd(position) { return segments.filter(s => s.kind !== 'separator' && s.end <= position).at(-1)?.end ?? 0; },
   };
 }
