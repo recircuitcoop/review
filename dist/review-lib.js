@@ -10,7 +10,9 @@ function validateOptions({ document: document2, labels }) {
 }
 var ReviewSession = class {
   #annotations = [];
-  #pending = null;
+  // Pending ranges in document order: disjoint, never touching. `#recent` is the one added last.
+  #pending = [];
+  #recent = null;
   #activeId = null;
   #undo = [];
   #redo = [];
@@ -26,7 +28,12 @@ var ReviewSession = class {
     this.#labels = labels.map(({ id, name, direction }) => ({ id, name, direction }));
     this.#emit = (name, detail) => onEvent(name, copy(detail));
   }
+  /** The most recently added pending range (what the whisper follows), or null. */
   get pending() {
+    return copy(this.#recent);
+  }
+  /** Every pending range in document order; a label commits all of them. */
+  get pendingRanges() {
     return copy(this.#pending);
   }
   get activeId() {
@@ -49,21 +56,38 @@ var ReviewSession = class {
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > text2.length || start >= end) throw new Error("Selection needs a nonempty in-document integer range.");
     return { start, end, quote: text2.slice(start, end), prefix: text2.slice(Math.max(0, start - 32), start), suffix: text2.slice(end, end + 32) };
   }
+  /** Replace the pending set with one range. */
   select(start, end) {
     const pending = this.anchor(start, end);
-    this.#pending = pending;
+    this.#pending = [pending];
+    this.#recent = pending;
     this.#activeId = null;
     this.#emit("selection", pending);
     return copy(pending);
   }
+  /** Add a range to the pending set (Shift); overlapping or touching ranges merge into one. */
+  add(start, end) {
+    let merged = this.anchor(start, end);
+    const joined = this.#pending.filter((p) => p.start <= merged.end && merged.start <= p.end);
+    if (joined.length) {
+      merged = this.anchor(Math.min(merged.start, ...joined.map((p) => p.start)), Math.max(merged.end, ...joined.map((p) => p.end)));
+    }
+    this.#pending = [...this.#pending.filter((p) => !joined.includes(p)), merged].sort(compare);
+    this.#recent = merged;
+    this.#activeId = null;
+    this.#emit("selection", merged);
+    return copy(merged);
+  }
   clear() {
-    this.#pending = null;
+    this.#pending = [];
+    this.#recent = null;
     this.#activeId = null;
     this.#emit("selection", null);
   }
   activate(id) {
     if (!this.#annotations.some((a) => a.id === id)) throw new Error("Unknown annotation ID.");
-    this.#pending = null;
+    this.#pending = [];
+    this.#recent = null;
     this.#activeId = id;
     this.#emit("selection", { annotationId: id });
   }
@@ -85,13 +109,15 @@ var ReviewSession = class {
   }
   classify(labelId) {
     if (!this.#labels.some((l) => l.id === labelId)) throw new Error("Unknown label ID.");
-    if (this.#pending) {
-      const annotation = freeze({ id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...this.#pending });
-      this.#pending = null;
+    if (this.#pending.length) {
+      const created = this.#pending.map((range) => freeze({ id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...range }));
+      const recent = created[this.#pending.indexOf(this.#recent)];
+      this.#pending = [];
+      this.#recent = null;
       this.#activeId = null;
-      this.#commit([...this.#annotations, annotation]);
+      this.#commit([...this.#annotations, ...created]);
       this.clear();
-      return copy(annotation);
+      return copy(recent);
     }
     if (this.#activeId) return this.relabel(this.#activeId, labelId);
     return null;
@@ -2663,6 +2689,20 @@ function element(tag, className, text2) {
 function selectableBlock(target) {
   return target.closest("li,pre") ?? target.closest(BLOCK_SELECTOR);
 }
+function blockScope(surface, text2, block) {
+  const contents = document.createRange();
+  contents.selectNodeContents(block);
+  const { start, end } = text2.fromRange(contents);
+  const level = Number(/^H([1-6])$/.exec(block.tagName)?.[1]);
+  if (level) {
+    const next = [...surface.querySelectorAll("h1,h2,h3,h4,h5,h6")].find((h) => block.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING && Number(h.tagName[1]) <= level);
+    if (!next) return { start, end: text2.text.length };
+    contents.selectNodeContents(next);
+    return { start, end: text2.fromRange(contents).start - 1 };
+  }
+  if (block.querySelector(BLOCK_SELECTOR) && text2.text[end - 1] === "\n") return { start, end: end - 1 };
+  return { start, end };
+}
 function renderMarkdown(surface, markdown) {
   const html2 = g.parse(markdown, { gfm: false });
   surface.innerHTML = purify.sanitize(html2, { ALLOWED_TAGS: TAGS, ALLOWED_ATTR: ["href", "title", "start"], ALLOW_DATA_ATTR: false });
@@ -2694,8 +2734,7 @@ function paintHighlights({ names, text: text2, labels, annotations, pending, act
     const ranges = annotations.filter((a) => a.labelId === label.id).map((a) => text2.range(a.start, a.end));
     CSS.highlights.set(names[direction], new Highlight(...ranges));
   }
-  const pendingRanges = pending ? [text2.range(pending.start, pending.end)] : [];
-  CSS.highlights.set(names.pending, new Highlight(...pendingRanges));
+  CSS.highlights.set(names.pending, new Highlight(...pending.map((p) => text2.range(p.start, p.end))));
   const activeRanges = active ? [text2.range(active.start, active.end)] : [];
   CSS.highlights.set(names.active, new Highlight(...activeRanges));
 }
@@ -2917,15 +2956,21 @@ function shortcutHelp({ display, mac, left, right }) {
 }
 
 // src/pointer.js
+var CONTINUATION_GAP_MS = 200;
 function installPointerInput(ctx) {
   const { surface, text: text2, state, left, right, dialogs, listen, safe } = ctx;
   let press = null;
-  function pointAt(x2, y2) {
+  let lastCanceled = -Infinity;
+  function caretAt(x2, y2) {
     const point = document.caretPositionFromPoint?.(x2, y2);
-    if (point && surface.contains(point.offsetNode)) return text2.offset(point.offsetNode, point.offset);
+    if (point && surface.contains(point.offsetNode)) return { node: point.offsetNode, offset: point.offset };
     const range = document.caretRangeFromPoint?.(x2, y2);
-    if (range && surface.contains(range.startContainer)) return text2.offset(range.startContainer, range.startOffset);
+    if (range && surface.contains(range.startContainer)) return { node: range.startContainer, offset: range.startOffset };
     return null;
+  }
+  function pointAt(x2, y2) {
+    const caret = caretAt(x2, y2);
+    return caret ? text2.offset(caret.node, caret.offset) : null;
   }
   function hitRange(anchor, x2, y2) {
     const rectangles = [...text2.range(anchor.start, anchor.end).getClientRects()];
@@ -2933,7 +2978,11 @@ function installPointerInput(ctx) {
   }
   listen(surface, "pointerdown", (event) => {
     if (event.button !== 0 || !event.isPrimary) return;
-    press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target };
+    press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target, shift: event.shiftKey };
+    if (!event.shiftKey) return;
+    const caret = caretAt(event.clientX, event.clientY);
+    if (caret) getSelection().collapse(caret.node, caret.offset);
+    else getSelection().removeAllRanges();
   });
   listen(surface, "pointerup", (event) => safe(() => {
     if (!press || press.id !== event.pointerId) return;
@@ -2942,47 +2991,58 @@ function installPointerInput(ctx) {
     const dx = event.clientX - current.x;
     const dy = event.clientY - current.y;
     if (ctx.nativeRange() || Math.hypot(dx, dy) > 4) {
-      ctx.syncSelection();
+      if (current.shift) ctx.appendNative();
+      else ctx.syncSelection();
       return;
     }
-    const at = pointAt(event.clientX, event.clientY);
-    const saved = at === null ? [] : state.read().filter((a) => at >= a.start && at < a.end && hitRange(a, event.clientX, event.clientY));
     ctx.resetNative();
     ctx.exitPrecise();
-    if (saved.length > 1) {
-      ctx.chooseOverlap(saved);
-      return;
-    }
-    if (saved.length === 1) {
-      ctx.activate(saved[0].id);
-      return;
+    if (!current.shift) {
+      const at = pointAt(event.clientX, event.clientY);
+      const saved = at === null ? [] : state.read().filter((a) => at >= a.start && at < a.end && hitRange(a, event.clientX, event.clientY));
+      if (saved.length > 1) {
+        ctx.chooseOverlap(saved);
+        return;
+      }
+      if (saved.length === 1) {
+        ctx.activate(saved[0].id);
+        return;
+      }
     }
     const block = selectableBlock(current.target);
     if (block && surface.contains(block)) {
       block.focus({ preventScroll: true });
-      ctx.selectBlock();
+      ctx.selectBlock(current.shift);
       return;
     }
-    state.clear();
+    if (!current.shift) state.clear();
   }));
   listen(surface, "pointercancel", () => {
     press = null;
   });
-  listen(document, "pointerup", (event) => {
+  listen(document, "pointerup", (event) => safe(() => {
     if (!press || surface.contains(event.target)) return;
+    const current = press;
     press = null;
-    ctx.syncSelection();
-  });
+    if (current.shift) ctx.appendNative();
+    else ctx.syncSelection();
+  }));
   listen(surface, "wheel", (event) => safe(() => {
     if (event.deltaX === 0 || event.deltaY !== 0) return;
     if (event.ctrlKey || event.metaKey) return;
+    if (event.timeStamp - lastCanceled < CONTINUATION_GAP_MS) {
+      event.preventDefault();
+      lastCanceled = event.timeStamp;
+      return;
+    }
     if (dialogs.isOpen) return;
     ctx.syncSelection();
-    const pending = state.pending;
-    if (!pending) return;
-    if (!hitRange(pending, event.clientX, event.clientY)) return;
+    const ranges = state.pendingRanges;
+    if (!ranges.some((range) => hitRange(range, event.clientX, event.clientY))) return;
+    event.preventDefault();
+    lastCanceled = event.timeStamp;
     ctx.classify(event.deltaX < 0 ? left : right);
-  }), { passive: true });
+  }), { passive: false });
 }
 
 // src/review.js
@@ -3119,10 +3179,12 @@ function mountReview(container, options) {
     const annotations = state.read();
     const pending = state.pending;
     const active = annotations.find((a) => a.id === state.activeId);
-    paintHighlights({ names, text: text2, labels, annotations, pending, active });
+    const ranges = state.pendingRanges;
+    paintHighlights({ names, text: text2, labels, annotations, pending: ranges, active });
     renderSavedList({ list, count, labels, annotations, activeId: state.activeId });
     paintWhisperNow();
-    if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
+    if (ranges.length > 1) announce(`Selected ${ranges.length} ranges. Latest: ${pending.quote.slice(0, 100)}`);
+    else if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
     else if (active) announce(`Editing ${labelName(active.labelId)}: ${active.quote.slice(0, 100)}`);
   }
   function paintWhisperNow() {
@@ -3131,13 +3193,16 @@ function mountReview(container, options) {
     paintWhisper({ whisper, layout, surface, text: text2, labels, annotations, pending: state.pending, active, precise, assignedId, focusedBlock, undoKeys: shortcuts.display.undo[0], expanded, held: pointerHeld });
   }
   let pointerHeld = false;
+  let appending = false;
   function releasePointer() {
+    appending = false;
     if (!pointerHeld) return;
     pointerHeld = false;
     if (!destroyed) safe(paintWhisperNow);
   }
-  listen(surface, "pointerdown", () => {
+  listen(surface, "pointerdown", (event) => {
     pointerHeld = true;
+    appending = event.shiftKey;
   });
   listen(document, "pointerup", releasePointer);
   listen(document, "pointercancel", releasePointer);
@@ -3153,7 +3218,7 @@ function mountReview(container, options) {
     return range;
   }
   function syncSelection() {
-    if (destroyed || dialogs.isOpen) return;
+    if (destroyed || dialogs.isOpen || appending) return;
     const range = nativeRange();
     if (!range) return;
     const { start, end } = text2.fromRange(range);
@@ -3162,6 +3227,13 @@ function mountReview(container, options) {
   }
   function resetNative() {
     if (nativeRange()) getSelection().removeAllRanges();
+  }
+  function appendNative() {
+    const range = nativeRange();
+    if (!range) return;
+    const { start, end } = text2.fromRange(range);
+    resetNative();
+    if (start < end) state.add(start, end);
   }
   function classify(label) {
     syncSelection();
@@ -3205,16 +3277,15 @@ function mountReview(container, options) {
     blocks[next].focus();
     return true;
   }
-  function selectBlock() {
+  function selectBlock(append = false) {
     const focusedInside = surface.contains(document.activeElement);
     const block = focusedInside ? selectableBlock(document.activeElement) ?? focusedBlock : focusedBlock;
     if (!block) return moveBlock(1);
     if (!(block instanceof HTMLElement) || !surface.contains(block) || !block.matches(BLOCK_SELECTOR)) return false;
-    const range = document.createRange();
-    range.selectNodeContents(block);
-    const positions = text2.fromRange(range);
-    if (positions.start < positions.end) {
-      state.select(positions.start, positions.end);
+    const { start, end } = blockScope(surface, text2, block);
+    if (start < end) {
+      if (append) state.add(start, end);
+      else state.select(start, end);
       resetNative();
     }
     return true;
@@ -3332,7 +3403,7 @@ function mountReview(container, options) {
     previousBlock: () => moveBlock(-1),
     nextAnnotation: () => navigateAnnotation(1),
     previousAnnotation: () => navigateAnnotation(-1),
-    selectBlock,
+    selectBlock: () => selectBlock(),
     precise: togglePrecise,
     help: showHelp,
     finish() {
@@ -3423,6 +3494,7 @@ function mountReview(container, options) {
     safe,
     classify,
     syncSelection,
+    appendNative,
     nativeRange,
     resetNative,
     exitPrecise() {
