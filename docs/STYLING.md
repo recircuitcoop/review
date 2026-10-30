@@ -95,7 +95,7 @@ Values must be nonempty CSS strings accepted by the browser for the correspondin
 | `toolbarPadding` | `9px 18px` |
 | `toolbarGap` | `8px` |
 | `buttonPadding` | `7px 9px` |
-| `paragraphSpacing` | `24px` |
+| `paragraphSpacing` | `32px` (bottom spacing of every document block; holds one whisper line) |
 | `codePadding` | `16px 18px` |
 | `dialogPadding` | `22px` |
 | `sidebarPadding` | `16px` |

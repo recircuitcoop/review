@@ -96,37 +96,33 @@ export function icon(name) {
   return holder.firstChild;
 }
 
-// Approved spacing: the whisper sits 14px below its block and keeps 26px before the next one.
-const WHISPER_GAP_ABOVE = 14;
-const WHISPER_GAP_BELOW = 26;
-// The document block currently reserving room for each whisper.
-const reservedBlocks = new WeakMap();
+// The document block each whisper is currently laid under.
+const anchoredBlocks = new WeakMap();
 
 /**
- * Lay the whisper over room reserved below `block` (null releases it). The whisper is an
- * overlay outside the document, so caret movement and selection never enter it; only the
- * block's bottom margin grows, so the passage itself never moves.
+ * Lay the whisper over the existing spacing below `block` (null forgets it). It is an
+ * overlay outside the document, so caret movement and selection never enter it, and it
+ * never changes any block's size or margin, so document text never moves for it. The
+ * uniform block spacing (`paragraphSpacing`) is sized to hold one whisper line.
  */
 export function placeWhisper(whisper, layout, block) {
-  const previous = reservedBlocks.get(whisper);
-  if (previous && previous !== block) previous.style.marginBottom = '';
   if (!block) {
-    reservedBlocks.delete(whisper);
+    anchoredBlocks.delete(whisper);
     return;
   }
-  reservedBlocks.set(whisper, block);
+  anchoredBlocks.set(whisper, block);
   const origin = layout.getBoundingClientRect();
   const rect = block.getBoundingClientRect();
-  // Width first: long label names wrap, and the reserved room follows the real height.
+  // Width first: long label names wrap, and the centring below follows the real height.
   whisper.style.left = `${rect.left - origin.left}px`;
   whisper.style.width = `${rect.width}px`;
-  whisper.style.top = `${rect.bottom - origin.top + WHISPER_GAP_ABOVE}px`;
-  block.style.marginBottom = `${WHISPER_GAP_ABOVE + whisper.offsetHeight + WHISPER_GAP_BELOW}px`;
+  const room = parseFloat(getComputedStyle(block).marginBottom) || 0;
+  whisper.style.top = `${rect.bottom - origin.top + Math.max(0, (room - whisper.offsetHeight) / 2)}px`;
 }
 
 /** Re-lay the whisper after reflow (resize, fonts); offsets never depend on this. */
 export function repositionWhisper(whisper, layout) {
-  const block = reservedBlocks.get(whisper);
+  const block = anchoredBlocks.get(whisper);
   if (block && !whisper.hidden) placeWhisper(whisper, layout, block);
 }
 
@@ -194,8 +190,8 @@ export function paintWhisper({ whisper, layout, surface, text, labels, annotatio
     anchor = end.nodeType === Node.TEXT_NODE ? end.parentElement : end;
   }
   // During a pointer press the placement holds still, so a drag never moves text under the pointer.
-  if (held && reservedBlocks.has(whisper)) {
-    placeWhisper(whisper, layout, reservedBlocks.get(whisper));
+  if (held && anchoredBlocks.has(whisper)) {
+    placeWhisper(whisper, layout, anchoredBlocks.get(whisper));
     return;
   }
   const block = anchor ? selectableBlock(anchor) : null;
