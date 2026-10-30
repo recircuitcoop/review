@@ -65,14 +65,31 @@ test('browser-generated horizontal wheel over pending text labels once; vertical
   await page.mouse.move(box.x + 45, box.y + 10);
   await page.mouse.wheel(0, 40);
   expect(await page.evaluate(() => review.read())).toHaveLength(0);
-  // Re-read geometry: the vertical wheel may have scrolled the document.
+  // Re-read geometry once the vertical wheel's scroll has settled.
+  await settleScroll(page);
   const moved = await block.boundingBox();
   await page.mouse.move(moved.x + 45, moved.y + 10);
   await page.mouse.wheel(-40, 0);
   await page.mouse.wheel(-40, 0);
+  // Wheel dispatch is asynchronous: wait for delivery, then confirm no second commit.
+  await expect.poll(() => page.evaluate(() => review.read().length)).toBe(1);
+  await settleScroll(page);
   const annotations = await page.evaluate(() => review.read());
   expect(annotations).toHaveLength(1); expect(annotations[0].labelId).toBe('accept');
 });
+
+// Wheel input scrolls asynchronously; wait until the scroll position stops changing.
+async function settleScroll(page) {
+  await page.evaluate(() => new Promise(resolve => {
+    let last = null;
+    const tick = () => {
+      if (last === scrollY) return resolve();
+      last = scrollY;
+      setTimeout(tick, 100);
+    };
+    setTimeout(tick, 100);
+  }));
+}
 
 test('clicks select list items and code blocks; keyboard navigation reaches both', async ({ page }) => {
   await openActions(page);
@@ -268,4 +285,177 @@ test('a mouse drag across a visible whisper selects the same text as without it'
   const baseline = await run(true);
   expect(baseline).toContain('\n');
   expect(await run(false)).toBe(baseline);
+});
+
+// --- Plan 26: hierarchical clicks, Shift-append ranges, canceled labeling swipes ---
+
+const pendingCount = page => page.evaluate(() => [...CSS.highlights].find(([name]) => name.endsWith('-pending'))[1].size);
+const documentText = page => page.evaluate(() => review.export().document.text);
+// The canonical slice from the start of `first` to the end of `last` (exclusive end).
+function slice(text, first, last) {
+  return text.slice(text.indexOf(first), last === null ? text.length : text.indexOf(last) + last.length);
+}
+const block = (page, tag, text) => page.locator(`.review-document ${tag}`, { hasText: text }).first();
+async function label(page, direction = 'Left') {
+  await page.keyboard.press(`Alt+Arrow${direction}`);
+  return page.evaluate(() => review.read().map(a => a.quote));
+}
+// Record whether each wheel event reaching the window was canceled by the annotator.
+async function recordWheels(page) {
+  await page.evaluate(() => { window.wheels = []; addEventListener('wheel', event => wheels.push(event.defaultPrevented)); });
+}
+// Dispatch a synthetic wheel event at the centre of the first element matching `selector`; returns defaultPrevented.
+function dispatchWheel(page, selector, init) {
+  return page.evaluate(({ selector, init }) => {
+    const target = document.querySelector(selector);
+    target.scrollIntoView({ block: 'center' });
+    const rect = target.getBoundingClientRect();
+    const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: rect.left + 12, clientY: rect.top + rect.height / 2, ...init });
+    document.elementFromPoint(event.clientX, event.clientY).dispatchEvent(event);
+    return event.defaultPrevented;
+  }, { selector, init });
+}
+
+test('a heading click selects its whole section up to the next heading of the same or higher rank', async ({ page }) => {
+  const text = await documentText(page);
+  await block(page, 'h2', 'Second section').click();
+  expect(await label(page)).toEqual([slice(text, 'Second section', 'Nested topic closing.')]);
+  await block(page, 'h3', 'Nested topic').click();
+  await block(page, 'h2', 'Third section').click({ modifiers: ['Shift'] });
+  const quotes = await label(page, 'Right');
+  expect(quotes).toContain(slice(text, 'Nested topic', 'Nested topic closing.'));
+  expect(quotes).toContain(slice(text, 'Third section', null));
+});
+
+test('a list item click selects its nested subtree; a nested item selects only its own', async ({ page }) => {
+  const text = await documentText(page);
+  await block(page, 'li', 'Parent item').click({ position: { x: 12, y: 8 } });
+  expect(await label(page)).toEqual([slice(text, 'Parent item', 'Second child')]);
+  await page.locator('.review-document li li').first().click({ position: { x: 12, y: 8 } });
+  expect(await label(page)).toContain(slice(text, 'Child item', 'Grandchild item'));
+});
+
+test('a drag inside a heading keeps its exact range instead of the section', async ({ page }) => {
+  const heading = block(page, 'h2', 'Second section');
+  const box = await heading.boundingBox();
+  await page.mouse.move(box.x + 4, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 70, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const dragged = await page.evaluate(() => getSelection().toString());
+  expect(dragged.length).toBeGreaterThan(0);
+  expect('Second section'.startsWith(dragged)).toBe(true);
+  expect(await label(page)).toEqual([dragged]);
+});
+
+test('Shift+click appends ranges, Escape clears them all, and a label commits each', async ({ page }) => {
+  await block(page, 'p', 'Section intro').click();
+  await block(page, 'p', 'Final paragraph').click({ modifiers: ['Shift'] });
+  expect(await pendingCount(page)).toBe(2);
+  // No browser Shift+click extension: nothing between the two paragraphs is natively selected.
+  expect(await page.evaluate(() => getSelection().toString())).toBe('');
+  await page.keyboard.press('Escape');
+  expect(await pendingCount(page)).toBe(0);
+  await block(page, 'p', 'Section intro').click();
+  await block(page, 'p', 'Final paragraph').click({ modifiers: ['Shift'] });
+  expect(await label(page)).toEqual(['Section intro paragraph.', 'Final paragraph.']);
+  // A plain click replaces the set again.
+  await block(page, 'p', 'Section intro').click({ modifiers: ['Shift'] });
+  await block(page, 'p', 'Nested topic closing').click();
+  expect(await pendingCount(page)).toBe(1);
+});
+
+test('Shift+drag appends an exact range to a clicked block', async ({ page }) => {
+  await block(page, 'p', 'Section intro').click();
+  const target = await block(page, 'p', 'Final paragraph').boundingBox();
+  await page.keyboard.down('Shift');
+  await page.mouse.move(target.x + 2, target.y + target.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + 50, target.y + target.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  expect(await pendingCount(page)).toBe(2);
+  const quotes = await label(page);
+  expect(quotes[0]).toBe('Section intro paragraph.');
+  expect(quotes[1].length).toBeGreaterThan(0);
+  expect(quotes[1].length).toBeLessThan('Final paragraph.'.length);
+  expect('Final paragraph.'.startsWith(quotes[1])).toBe(true);
+});
+
+test('overlapping appended ranges merge into one contiguous range', async ({ page }) => {
+  const text = await documentText(page);
+  await page.locator('.review-document li li').first().click({ position: { x: 12, y: 8 } });
+  await block(page, 'li', 'Parent item').click({ position: { x: 12, y: 8 }, modifiers: ['Shift'] });
+  expect(await pendingCount(page)).toBe(1);
+  expect(await label(page)).toEqual([slice(text, 'Parent item', 'Second child')]);
+});
+
+test('one swipe over any pending range labels all of them as one undo step', async ({ page }) => {
+  await recordWheels(page);
+  await block(page, 'p', 'Section intro').click();
+  await block(page, 'p', 'Final paragraph').click({ modifiers: ['Shift'] });
+  await page.mouse.wheel(-40, 0);
+  await expect.poll(() => page.evaluate(() => review.read().length)).toBe(2);
+  const saved = await page.evaluate(() => review.read());
+  expect(saved.map(a => [a.quote, a.labelId])).toEqual([['Section intro paragraph.', 'accept'], ['Final paragraph.', 'accept']]);
+  expect(await page.evaluate(() => wheels)).toEqual([true]);
+  await page.locator('.review-document').focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  expect(await page.evaluate(() => review.read())).toHaveLength(0);
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  expect(await page.evaluate(() => review.read())).toHaveLength(2);
+});
+
+test('labeling swipes in both directions are canceled so the browser cannot navigate history', async ({ page }) => {
+  await recordWheels(page);
+  await block(page, 'p', 'Section intro').click();
+  await page.mouse.wheel(-40, 0);
+  await expect.poll(() => page.evaluate(() => review.read().length)).toBe(1);
+  // Wait out the continuation window so the next swipe is a new gesture.
+  await page.waitForTimeout(300);
+  await block(page, 'p', 'Final paragraph').click();
+  await page.mouse.wheel(40, 0);
+  await expect.poll(() => page.evaluate(() => review.read().length)).toBe(2);
+  expect(await page.evaluate(() => review.read().map(a => a.labelId))).toEqual(['accept', 'reject']);
+  expect(await page.evaluate(() => wheels)).toEqual([true, true]);
+});
+
+test('vertical, zoom, mixed, no-pending and outside wheel input is never canceled', async ({ page }) => {
+  await recordWheels(page);
+  await block(page, 'p', 'Section intro').click();
+  await page.mouse.wheel(0, 40);
+  await expect.poll(() => page.evaluate(() => wheels)).toEqual([false]);
+  const intro = '.review-document h2 + p';
+  expect(await dispatchWheel(page, intro, { deltaX: 30, deltaY: 0, ctrlKey: true })).toBe(false);
+  expect(await dispatchWheel(page, intro, { deltaX: 30, deltaY: 0, metaKey: true })).toBe(false);
+  expect(await dispatchWheel(page, intro, { deltaX: 30, deltaY: 4 })).toBe(false);
+  expect(await dispatchWheel(page, '.review-document h1', { deltaX: 30, deltaY: 0 })).toBe(false);
+  await page.keyboard.press('Escape');
+  expect(await dispatchWheel(page, intro, { deltaX: 30, deltaY: 0 })).toBe(false);
+  expect(await page.evaluate(() => review.read())).toHaveLength(0);
+});
+
+test('a swipe continuation is canceled but never labels a newly made selection', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const text = review.export().document.text;
+    const range = quote => [text.indexOf(quote), text.indexOf(quote) + quote.length];
+    const wheel = selector => {
+      const target = document.querySelector(selector);
+      target.scrollIntoView({ block: 'center' });
+      const rect = target.getBoundingClientRect();
+      const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: -30, deltaY: 0, clientX: rect.left + 12, clientY: rect.top + rect.height / 2 });
+      document.elementFromPoint(event.clientX, event.clientY).dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    review.select(...range('Section intro paragraph.'));
+    const first = wheel('.review-document h2 + p');
+    // Late momentum of the same gesture lands on a selection made right after the commit.
+    review.select(...range('Final paragraph.'));
+    const continuation = wheel('.review-document p:last-child');
+    const afterContinuation = review.read().length;
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const fresh = wheel('.review-document p:last-child');
+    return { first, continuation, afterContinuation, fresh, quotes: review.read().map(a => a.quote) };
+  });
+  expect(result).toEqual({ first: true, continuation: true, afterContinuation: 1, fresh: true, quotes: ['Section intro paragraph.', 'Final paragraph.'] });
 });

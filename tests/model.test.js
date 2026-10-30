@@ -146,3 +146,50 @@ test('actual browser-downloaded label fixtures retain quotes and restore togethe
   assert.equal(s.read().length, 2);
   for (const annotation of s.read()) assert.equal(s.text.slice(annotation.start, annotation.end), annotation.quote);
 });
+
+test('Shift-style add merges overlapping or touching ranges; select replaces the whole set', () => {
+  const s = session();
+  s.select(0, 5);
+  s.add(5, 8);
+  assert.deepEqual(s.pendingRanges.map(r => [r.start, r.end]), [[0, 8]]);
+  s.add(10, 12);
+  assert.deepEqual(s.pendingRanges.map(r => [r.start, r.end]), [[0, 8], [10, 12]]);
+  // A range bridging two pending ranges merges all three into one contiguous range.
+  const merged = s.add(7, 11);
+  assert.deepEqual([merged.start, merged.end], [0, 12]);
+  assert.deepEqual(s.pendingRanges.map(r => [r.start, r.end]), [[0, 12]]);
+  s.add(16, 21);
+  // The most recent range is the one the whisper follows.
+  assert.equal(s.pending.quote, 'Hello');
+  assert.throws(() => s.add(3, 3));
+  assert.equal(s.pendingRanges.length, 2);
+  s.select(1, 2);
+  assert.deepEqual(s.pendingRanges.map(r => [r.start, r.end]), [[1, 2]]);
+  s.clear();
+  assert.deepEqual(s.pendingRanges, []);
+  assert.equal(s.pending, null);
+});
+
+test('classify commits every pending range as one undo step', () => {
+  const s = session();
+  s.select(0, 5); s.classify('reject');
+  const saved = s.read()[0].id;
+  s.activate(saved);
+  // Appending ends saved-annotation editing and starts a pending set.
+  s.add(16, 21); s.add(6, 8);
+  assert.equal(s.activeId, null);
+  const created = [];
+  const observed = new ReviewSession(options(), (name, detail) => { if (name === 'create') created.push(detail.quote); });
+  observed.select(16, 21); observed.add(6, 8);
+  observed.classify('accept');
+  assert.deepEqual(created, ['🌍', 'Hello']);
+  const recent = s.classify('accept');
+  assert.equal(recent.quote, '🌍');
+  assert.deepEqual(s.read().map(a => [a.quote, a.labelId]), [['Hello', 'reject'], ['🌍', 'accept'], ['Hello', 'accept']]);
+  assert.deepEqual(s.pendingRanges, []);
+  assert.equal(s.undo(), true);
+  assert.deepEqual(s.read().map(a => a.id), [saved]);
+  assert.equal(s.redo(), true);
+  assert.equal(s.read().length, 3);
+  assert.equal(s.export().selections.accept.length, 2);
+});
