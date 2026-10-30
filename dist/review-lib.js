@@ -258,6 +258,10 @@ function canonicalText(root) {
     },
     fromRange(range) {
       return { start: offset(range.startContainer, range.startOffset), end: offset(range.endContainer, range.endOffset) };
+    },
+    /** The end of the last rendered content (text or line break, never a block separator) at or before `position`. */
+    contentEnd(position) {
+      return segments.filter((s) => s.kind !== "separator" && s.end <= position).at(-1)?.end ?? 0;
     }
   };
 }
@@ -331,7 +335,7 @@ var tokens = {
   toolbarPadding: ["--review-toolbar-padding", "padding", "9px 18px"],
   toolbarGap: ["--review-toolbar-gap", "gap", "8px"],
   buttonPadding: ["--review-button-padding", "padding", "7px 9px"],
-  paragraphSpacing: ["--review-paragraph-spacing", "margin-bottom", "24px"],
+  paragraphSpacing: ["--review-paragraph-spacing", "margin-bottom", "32px"],
   codePadding: ["--review-code-padding", "padding", "16px 18px"],
   dialogPadding: ["--review-dialog-padding", "padding", "22px"],
   sidebarPadding: ["--review-sidebar-padding", "padding", "16px"],
@@ -2697,11 +2701,12 @@ function blockScope(surface, text2, block) {
   if (level) {
     const next = [...surface.querySelectorAll("h1,h2,h3,h4,h5,h6")].find((h) => block.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING && Number(h.tagName[1]) <= level);
     if (!next) return { start, end: text2.text.length };
-    contents.selectNodeContents(next);
-    return { start, end: text2.fromRange(contents).start - 1 };
+    const section = document.createRange();
+    section.setStart(contents.startContainer, contents.startOffset);
+    section.setEndBefore(next);
+    return { start, end: text2.contentEnd(text2.fromRange(section).end) };
   }
-  if (block.querySelector(BLOCK_SELECTOR) && text2.text[end - 1] === "\n") return { start, end: end - 1 };
-  return { start, end };
+  return { start, end: text2.contentEnd(end) };
 }
 function renderMarkdown(surface, markdown) {
   const html2 = g.parse(markdown, { gfm: false });
@@ -2747,26 +2752,22 @@ function icon(name) {
   holder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`;
   return holder.firstChild;
 }
-var WHISPER_GAP_ABOVE = 14;
-var WHISPER_GAP_BELOW = 26;
-var reservedBlocks = /* @__PURE__ */ new WeakMap();
+var anchoredBlocks = /* @__PURE__ */ new WeakMap();
 function placeWhisper(whisper, layout, block) {
-  const previous = reservedBlocks.get(whisper);
-  if (previous && previous !== block) previous.style.marginBottom = "";
   if (!block) {
-    reservedBlocks.delete(whisper);
+    anchoredBlocks.delete(whisper);
     return;
   }
-  reservedBlocks.set(whisper, block);
+  anchoredBlocks.set(whisper, block);
   const origin = layout.getBoundingClientRect();
   const rect = block.getBoundingClientRect();
   whisper.style.left = `${rect.left - origin.left}px`;
   whisper.style.width = `${rect.width}px`;
-  whisper.style.top = `${rect.bottom - origin.top + WHISPER_GAP_ABOVE}px`;
-  block.style.marginBottom = `${WHISPER_GAP_ABOVE + whisper.offsetHeight + WHISPER_GAP_BELOW}px`;
+  const room = parseFloat(getComputedStyle(block).marginBottom) || 0;
+  whisper.style.top = `${rect.bottom - origin.top + Math.max(0, (room - whisper.offsetHeight) / 2)}px`;
 }
 function repositionWhisper(whisper, layout) {
-  const block = reservedBlocks.get(whisper);
+  const block = anchoredBlocks.get(whisper);
   if (block && !whisper.hidden) placeWhisper(whisper, layout, block);
 }
 function paintWhisper({ whisper, layout, surface, text: text2, labels, annotations, pending, active, precise, assignedId, focusedBlock, undoKeys, expanded, held }) {
@@ -2820,8 +2821,8 @@ function paintWhisper({ whisper, layout, surface, text: text2, labels, annotatio
     const end = text2.range(target.start, target.end).endContainer;
     anchor = end.nodeType === Node.TEXT_NODE ? end.parentElement : end;
   }
-  if (held && reservedBlocks.has(whisper)) {
-    placeWhisper(whisper, layout, reservedBlocks.get(whisper));
+  if (held && anchoredBlocks.has(whisper)) {
+    placeWhisper(whisper, layout, anchoredBlocks.get(whisper));
     return;
   }
   const block = anchor ? selectableBlock(anchor) : null;
