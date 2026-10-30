@@ -127,8 +127,10 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review-document { font-family: var(--review-document-font); font-size: var(--review-document-size); line-height: var(--review-document-line-height); padding: var(--review-document-padding); min-height: 25rem; overflow-wrap: anywhere; }
 .review-document :is(h1, h2, h3, h4, h5, h6) { font-family: var(--review-heading-font); letter-spacing: var(--review-heading-spacing); line-height: var(--review-heading-line-height); }
 .review-document h1 { font-size: var(--review-heading-size); }
-/* One uniform block spacing, sized to hold one whisper line, so the whisper never needs extra room. */
-.review-document :is(p, h1, h2, h3, h4, h5, h6, ul, ol, li, pre, blockquote) { margin-top: 0; margin-bottom: var(--review-paragraph-spacing); }
+/* Paragraphs and code blocks, the usual whisper anchors, keep a bottom spacing that holds one whisper line.
+   Headings, lists and quotes keep their native spacing; a whisper there overlays the next line (opaque, inert). */
+.review-document p { margin: 0 0 var(--review-paragraph-spacing); }
+.review-document pre { margin-bottom: var(--review-paragraph-spacing); }
 .review-document a { color: var(--review-link); text-decoration-style: dotted; }
 .review-document pre { background: var(--review-code); padding: var(--review-code-padding); overflow: auto; line-height: var(--review-code-line-height); border-radius: var(--review-code-radius); white-space: pre-wrap; }
 .review-document code { font-family: var(--review-code-font); font-size: var(--review-code-size); line-height: var(--review-code-line-height); }
