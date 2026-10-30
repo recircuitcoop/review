@@ -18,8 +18,9 @@ export function selectableBlock(target) {
 }
 
 /**
- * The canonical range a click or Enter on `block` selects. A heading takes its section, up to
- * the next heading of the same or higher rank; a list item takes its nested hierarchy.
+ * The canonical range a click or Enter on `block` selects, plus the elements it covers (the swipe
+ * hit area). A heading takes its section, up to the next heading of the same or higher rank; a
+ * list item takes its nested hierarchy.
  */
 export function blockScope(surface, text, block) {
   const contents = document.createRange();
@@ -29,15 +30,18 @@ export function blockScope(surface, text, block) {
   if (level) {
     const next = [...surface.querySelectorAll('h1,h2,h3,h4,h5,h6')]
       .find(h => block.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING && Number(h.tagName[1]) <= level);
-    if (!next) return { start, end: text.text.length };
+    // The heading and its following siblings, up to the one that is or holds the next heading.
+    const elements = [block];
+    for (let node = block.nextElementSibling; node && !(next && node.contains(next)); node = node.nextElementSibling) elements.push(node);
+    if (!next) return { start, end: text.text.length, elements };
     // The section ends with the last rendered content before the next heading element.
     const section = document.createRange();
     section.setStart(contents.startContainer, contents.startOffset);
     section.setEndBefore(next);
-    return { start, end: text.contentEnd(text.fromRange(section).end) };
+    return { start, end: text.contentEnd(text.fromRange(section).end), elements };
   }
   // Nested blocks close with their own separators inside the item; the range ends on content.
-  return { start, end: text.contentEnd(end) };
+  return { start, end: text.contentEnd(end), elements: [block] };
 }
 
 /** Render sanitized Markdown into the surface and return its keyboard-focusable blocks in document order. */

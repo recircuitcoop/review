@@ -215,7 +215,10 @@ export function mountReview(container, options) {
     if (!range) return;
     const { start, end } = text.fromRange(range);
     const unchanged = state.pending?.start === start && state.pending?.end === end;
-    if (start < end && !unchanged) state.select(start, end);
+    if (start < end && !unchanged) {
+      state.select(start, end);
+      rememberHitArea(start, end, range.cloneRange());
+    }
   }
   function resetNative() {
     if (nativeRange()) getSelection().removeAllRanges();
@@ -227,7 +230,49 @@ export function mountReview(container, options) {
     const { start, end } = text.fromRange(range);
     // Native Selection holds one range; clearing it leaves every pending range to the highlight.
     resetNative();
-    if (start < end) state.add(start, end);
+    if (start < end) {
+      state.add(start, end);
+      rememberHitArea(start, end, text.range(start, end));
+    }
+  }
+
+  // --- Swipe hit areas ------------------------------------------------------
+  // Presentation-only geometry sources for pending ranges, captured when each range is made so
+  // the wheel path never maps offsets or walks the document. Merged pending ranges keep the
+  // entries of every part they absorbed.
+  let hitAreas = [];
+  const within = (entry, range) => entry.start >= range.start && entry.end <= range.end;
+  /** Record what a new pending piece covers: its DOM range and, for a block scope, the blocks. */
+  function rememberHitArea(start, end, range, elements = []) {
+    const pending = state.pendingRanges;
+    hitAreas = hitAreas.filter(entry => pending.some(r => within(entry, r)));
+    hitAreas.push({ start, end, range, elements });
+  }
+  // One pixel on every edge absorbs sub-pixel rounding at block boundaries.
+  const TOLERANCE = 1;
+  const inside = (r, x, y) => x >= r.left - TOLERANCE && x <= r.right + TOLERANCE && y >= r.top - TOLERANCE && y <= r.bottom + TOLERANCE;
+  /** A covered block's live box; a list item reaches left to its list's edge so its marker counts. */
+  function blockBox(element) {
+    const rect = element.getBoundingClientRect();
+    if (element.tagName !== 'LI' || !element.parentElement) return rect;
+    return { left: Math.min(rect.left, element.parentElement.getBoundingClientRect().left), right: rect.right, top: rect.top, bottom: rect.bottom };
+  }
+  /** Whether a viewport point is over any pending range, from live geometry of its recorded pieces. */
+  function hitsPending(x, y) {
+    for (const range of state.pendingRanges) {
+      for (const entry of hitAreas) {
+        if (!within(entry, range)) continue;
+        if ([...entry.range.getClientRects()].some(r => inside(r, x, y))) return true;
+        const boxes = entry.elements.map(blockBox);
+        if (boxes.some(box => inside(box, x, y))) return true;
+        // A multi-block scope (a section) also covers the gaps between its blocks, across the column.
+        if (boxes.length > 1) {
+          const column = surface.getBoundingClientRect();
+          if (inside({ left: column.left, right: column.right, top: boxes[0].top, bottom: boxes.at(-1).bottom }, x, y)) return true;
+        }
+      }
+    }
+    return false;
   }
 
   // --- Operations shared by buttons, keys, clicks and wheel -----------------
@@ -284,10 +329,11 @@ export function mountReview(container, options) {
     // No block yet: the first Enter focuses one instead of selecting.
     if (!block) return moveBlock(1);
     if (!(block instanceof HTMLElement) || !surface.contains(block) || !block.matches(BLOCK_SELECTOR)) return false;
-    const { start, end } = blockScope(surface, text, block);
+    const { start, end, elements } = blockScope(surface, text, block);
     if (start < end) {
       if (append) state.add(start, end);
       else state.select(start, end);
+      rememberHitArea(start, end, text.range(start, end), elements);
       resetNative();
     }
     return true;
@@ -518,6 +564,7 @@ export function mountReview(container, options) {
     classify,
     syncSelection,
     appendNative,
+    hitsPending,
     nativeRange,
     resetNative,
     exitPrecise() {
@@ -588,7 +635,9 @@ export function mountReview(container, options) {
       guard();
       state.anchor(start, end);
       resetNative();
-      return state.select(start, end);
+      const selected = state.select(start, end);
+      rememberHitArea(start, end, text.range(start, end));
+      return selected;
     },
     clear() {
       guard();

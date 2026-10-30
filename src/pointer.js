@@ -1,4 +1,4 @@
-import { BLOCK_SELECTOR, selectableBlock } from './render.js';
+import { selectableBlock } from './render.js';
 
 // Implementation tuning (plan 26): wheel events of one swipe or momentum stream arrive about a
 // frame apart, far inside this gap; a deliberate new select-then-swipe takes longer.
@@ -36,32 +36,6 @@ export function installPointerInput(ctx) {
   function hitRange(anchor, x, y) {
     const rectangles = [...text.range(anchor.start, anchor.end).getClientRects()];
     return rectangles.some(r => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
-  }
-
-  const inside = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-
-  /**
-   * Whether a viewport point is over a pending range, read now: its text line boxes, the
-   * border box of every block it fully covers (a click anywhere in a block selects it, so the
-   * swipe that follows works from the same point), and for several covered blocks the band
-   * between the first one's top and the last one's bottom across the document column.
-   */
-  function hitPending(range, x, y) {
-    if (hitRange(range, x, y)) return true;
-    const covered = [...surface.querySelectorAll(BLOCK_SELECTOR)].filter(block => {
-      const contents = document.createRange();
-      contents.selectNodeContents(block);
-      const { start, end } = text.fromRange(contents);
-      const last = text.contentEnd(end);
-      return start < last && start >= range.start && last <= range.end;
-    }).map(block => block.getBoundingClientRect());
-    if (!covered.length) return false;
-    if (covered.some(rect => inside(rect, x, y))) return true;
-    if (covered.length < 2) return false;
-    const column = surface.getBoundingClientRect();
-    const top = Math.min(...covered.map(rect => rect.top));
-    const bottom = Math.max(...covered.map(rect => rect.bottom));
-    return inside({ left: column.left, right: column.right, top, bottom }, x, y);
   }
 
   // No preventDefault or capture: a press on pending text starts native text selection.
@@ -141,11 +115,10 @@ export function installPointerInput(ctx) {
       return;
     }
     if (dialogs.isOpen) return;
-    // Mirror any native range first so the hit test uses the current pending target.
-    ctx.syncSelection();
+    // Bounded work: only the pending ranges' recorded pieces, read from live geometry. No offset
+    // mapping here; selectionchange and pointerup already mirror native drags into pending.
     // Without a pending range classify would relabel an active saved annotation; wheel never does.
-    const ranges = state.pendingRanges;
-    if (!ranges.some(range => hitPending(range, event.clientX, event.clientY))) return;
+    if (!ctx.hitsPending(event.clientX, event.clientY)) return;
     event.preventDefault();
     lastCanceled = event.timeStamp;
     ctx.classify(event.deltaX < 0 ? left : right);
