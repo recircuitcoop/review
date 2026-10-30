@@ -558,6 +558,77 @@ test.describe('heading sections and nested lists (sections.md)', () => {
     await expect.poll(() => page.evaluate(() => review.read().length)).toBe(1);
     expect(await page.evaluate(() => wheels)).toEqual([false, false, true]);
   });
+
+  // A bullet marker sits outside its list item's box, left of it.
+  async function clickMarker(page, item, modifiers = []) {
+    await item.evaluate(node => node.scrollIntoView({ block: 'center' }));
+    const box = await item.boundingBox();
+    if (modifiers.length) await page.keyboard.down(modifiers[0]);
+    await page.mouse.click(box.x - 12, box.y + 8);
+    if (modifiers.length) await page.keyboard.up(modifiers[0]);
+  }
+  const listItem = (page, text) => page.locator('.review-document li').filter({ hasText: new RegExp(`^${text}$`) });
+
+  test('a bullet click, then a swipe in place, labels and cancels: leaf, nested and Shift multi-range', async ({ page }) => {
+    await recordWheels(page);
+    await clickMarker(page, listItem(page, 'Sibling item'));
+    await page.mouse.wheel(-40, 0);
+    await expect.poll(() => page.evaluate(() => review.read().map(a => a.quote))).toEqual(['Sibling item']);
+    await page.waitForTimeout(300);
+    await clickMarker(page, listItem(page, 'Second child'));
+    await page.mouse.wheel(40, 0);
+    await expect.poll(() => page.evaluate(() => review.read().length)).toBe(2);
+    await page.waitForTimeout(300);
+    await block(page, 'p', 'Section intro').click(AT_TEXT);
+    await clickMarker(page, listItem(page, 'Grandchild item'), ['Shift']);
+    await page.mouse.wheel(-40, 0);
+    await expect.poll(() => page.evaluate(() => review.read().length)).toBe(4);
+    expect(await page.evaluate(() => review.read().map(a => [a.quote, a.labelId]))).toEqual([
+      ['Section intro paragraph.', 'accept'], ['Grandchild item', 'accept'], ['Second child', 'reject'], ['Sibling item', 'accept'],
+    ]);
+    expect(await page.evaluate(() => wheels)).toEqual([true, true, true]);
+  });
+
+  test('a click on a nested item\'s top boundary, then a swipe in place, labels and cancels', async ({ page }) => {
+    await recordWheels(page);
+    const item = page.locator('.review-document li li').first();
+    const box = await item.boundingBox();
+    // An integer point just above the item's fractional top (browsers dispatch wheel input at whole pixels).
+    const y = Number.isInteger(box.y) ? box.y - 0.5 : Math.floor(box.y);
+    await page.mouse.click(box.x + 20, y);
+    expect(await pendingCount(page)).toBe(1);
+    await page.mouse.wheel(-40, 0);
+    await expect.poll(() => page.evaluate(() => review.read().length)).toBe(1);
+    expect(await page.evaluate(() => wheels)).toEqual([true]);
+  });
+});
+
+test('wheel handling stays under a frame on a 2000-block document with a pending selection', async ({ page }) => {
+  await page.evaluate(() => {
+    review.destroy();
+    const markdown = Array.from({ length: 2000 }, (_, i) => `Paragraph ${i} with a few words of text.`).join('\n\n');
+    window.review = mountReview(document.querySelector('#fixture'), { ...fixtureOptions, document: { ...fixtureOptions.document, markdown } });
+  });
+  await page.locator('.review-document p').first().click({ position: { x: 12, y: 8 } });
+  const result = await page.evaluate(() => {
+    const point = node => { const r = node.getBoundingClientRect(); return { clientX: r.left + 12, clientY: r.top + r.height / 2 }; };
+    const timed = (node, deltaX) => {
+      const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX, deltaY: 0, ...point(node) });
+      const before = performance.now();
+      node.dispatchEvent(event);
+      return { ms: performance.now() - before, prevented: event.defaultPrevented };
+    };
+    const paragraphs = document.querySelectorAll('.review-document p');
+    // Misses over other paragraphs: none cancels, so each is a full (non-continuation) hit test.
+    const misses = Array.from({ length: 20 }, (_, i) => timed(paragraphs[2 + i], 30));
+    const hit = timed(paragraphs[0], -30);
+    return { misses, hit, saved: review.read().length };
+  });
+  expect(result.misses.every(m => !m.prevented)).toBe(true);
+  expect(Math.max(...result.misses.map(m => m.ms))).toBeLessThan(16);
+  expect(result.hit.prevented).toBe(true);
+  expect(result.hit.ms).toBeLessThan(16);
+  expect(result.saved).toBe(1);
 });
 
 test('a click in a code block\'s left padding, then a swipe in place, labels and cancels', async ({ page }) => {
