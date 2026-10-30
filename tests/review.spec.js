@@ -223,8 +223,7 @@ test('••• swap keeps navbar and document still; real Escape collapses firs
 async function freshFixture(page, hideWhisper) {
   await page.goto('/tests/fixture.html');
   await page.waitForFunction(() => window.review);
-  // Hiding also drops the room reserved below the passage, leaving plain native layout.
-  if (hideWhisper) await page.addStyleTag({ content: '.review-whisper { display: none !important; } .review-document [style] { margin-bottom: revert !important; }' });
+  if (hideWhisper) await page.addStyleTag({ content: '.review-whisper { display: none !important; }' });
 }
 
 test('precise Shift+ArrowDown crosses blocks past a visible whisper exactly as without it; F2 then label saves the full range', async ({ page }) => {
@@ -277,7 +276,6 @@ test.describe('heading sections and nested lists (sections.md)', () => {
     await page.goto('/tests/fixture.html?doc=sections');
     await page.waitForFunction(() => window.review);
   });
-
 
   const pendingCount = page => page.evaluate(() => [...CSS.highlights].find(([name]) => name.endsWith('-pending'))[1].size);
   const documentText = page => page.evaluate(() => review.export().document.text);
@@ -395,8 +393,6 @@ test.describe('heading sections and nested lists (sections.md)', () => {
     await recordWheels(page);
     await block(page, 'p', 'Section intro').click(AT_TEXT);
     await block(page, 'p', 'Final paragraph').click({ ...AT_TEXT, modifiers: ['Shift'] });
-    // The whisper moved to the newest range, shifting text; hover the passage again before swiping.
-    await block(page, 'p', 'Final paragraph').hover(AT_TEXT);
     await page.mouse.wheel(-40, 0);
     await expect.poll(() => page.evaluate(() => review.read().length)).toBe(2);
     const saved = await page.evaluate(() => review.read());
@@ -417,7 +413,6 @@ test.describe('heading sections and nested lists (sections.md)', () => {
     // Wait out the continuation window so the next swipe is a new gesture.
     await page.waitForTimeout(300);
     await block(page, 'p', 'Final paragraph').click(AT_TEXT);
-    await block(page, 'p', 'Final paragraph').hover(AT_TEXT);
     await page.mouse.wheel(40, 0);
     await expect.poll(() => page.evaluate(() => review.read().length)).toBe(2);
     expect(await page.evaluate(() => review.read().map(a => a.labelId))).toEqual(['accept', 'reject']);
@@ -462,5 +457,63 @@ test.describe('heading sections and nested lists (sections.md)', () => {
       return { first, continuation, afterContinuation, fresh, quotes: review.read().map(a => a.quote) };
     });
     expect(result).toEqual({ first: true, continuation: true, afterContinuation: 1, fresh: true, quotes: ['Section intro paragraph.', 'Final paragraph.'] });
+  });
+
+  // Every block's position within the document surface, plus the surface size. Rounded to
+  // 0.01px: Firefox reports ~1e-5px float noise under subpixel scrolling; real shifts are whole lines.
+  function blockGeometry(page) {
+    return page.evaluate(() => {
+      const round = value => Math.round(value * 100) / 100;
+      const surface = document.querySelector('.review-document');
+      const origin = surface.getBoundingClientRect();
+      const blocks = [...surface.querySelectorAll(':is(p, h1, h2, h3, li, pre, blockquote)')].map(node => {
+        const rect = node.getBoundingClientRect();
+        return [rect.left - origin.left, rect.top - origin.top, rect.width, rect.height].map(round);
+      });
+      return [[origin.width, origin.height].map(round), ...blocks];
+    });
+  }
+
+  test('selection, append, label and undo never move document text', async ({ page }) => {
+    const baseline = await blockGeometry(page);
+    const steps = [
+      ['plain click', () => block(page, 'p', 'Section intro').click(AT_TEXT)],
+      ['plain click below', () => block(page, 'p', 'Nested topic closing').click(AT_TEXT)],
+      ['Shift+click below', () => block(page, 'p', 'Final paragraph').click({ ...AT_TEXT, modifiers: ['Shift'] })],
+      ['Shift+click above', () => block(page, 'p', 'Opening paragraph').click({ ...AT_TEXT, modifiers: ['Shift'] })],
+      ['label', () => page.keyboard.press('Alt+ArrowLeft')],
+      ['undo', () => page.keyboard.press('ControlOrMeta+z')],
+    ];
+    for (const [name, step] of steps) {
+      await step();
+      // Undo hides the whisper by design; every other step shows it.
+      if (name !== 'undo') await expect(page.locator('.review-whisper'), name).toBeVisible();
+      expect(await blockGeometry(page), name).toEqual(baseline);
+    }
+  });
+
+  test('click, then swipe without moving the pointer: labels and cancels in both directions', async ({ page }) => {
+    await recordWheels(page);
+    await block(page, 'p', 'Section intro').click(AT_TEXT);
+    await block(page, 'p', 'Nested topic closing').click(AT_TEXT);
+    await page.mouse.wheel(-40, 0);
+    await expect.poll(() => page.evaluate(() => review.read().map(a => [a.quote, a.labelId]))).toEqual([['Nested topic closing.', 'accept']]);
+    await page.waitForTimeout(300);
+    // Build a Shift selection top to bottom, then swipe right where the last click landed.
+    await block(page, 'p', 'Section intro').click(AT_TEXT);
+    await block(page, 'p', 'Final paragraph').click({ ...AT_TEXT, modifiers: ['Shift'] });
+    await page.mouse.wheel(40, 0);
+    await expect.poll(() => page.evaluate(() => review.read().length)).toBe(3);
+    expect(await page.evaluate(() => review.read().map(a => a.labelId))).toEqual(['reject', 'accept', 'reject']);
+    expect(await page.evaluate(() => wheels)).toEqual([true, true]);
+  });
+
+  test('a section ends at the last content before the next heading, even without a separator', async ({ page }) => {
+    await page.evaluate(() => {
+      review.destroy();
+      window.review = mountReview(document.querySelector('#fixture'), { ...fixtureOptions, document: { ...fixtureOptions.document, markdown: '## A\n\n- item\n  ## B\n\n## C\n\nz\n' } });
+    });
+    await block(page, 'h2', 'A').click();
+    expect(await label(page)).toEqual(['A\nitem']);
   });
 });
