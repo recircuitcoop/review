@@ -4,7 +4,7 @@ Seed: [selection-swipe-library.md](../../selection-swipe-library.md). The seed r
 
 Plans **01–12** are complete for core/local acceptance. **14** is complete with both real downloads verified in the initial nine-job CI matrix. **15** (saved-review reopening) and **16** (night theme) are implemented and locally verified; expanded CI and remaining native accessibility checks are pending. **13** remains open: the initial Windows/Linux/macOS × Chromium/Firefox/WebKit run passed, but the newer feature/shortcut tests must pass that gate too. See [verification](../VERIFICATION.md).
 
-Latest recorded local proof (2026-10-30, plan 26): **28 Node tests** and **111 Playwright cases** (37 per engine across Chromium, Firefox and WebKit) on macOS; the plan 25 head passed the nine-job CI matrix ([run 40967319567](https://github.com/recircuitcoop/review/actions/runs/40967319567)). The earlier [green CI run](https://github.com/recircuitcoop/review/actions/runs/39318606377) covers 17 Node tests and 10 browser tests per job; it does not cover subsequent changes. Displayed shortcuts use Cmd on macOS and Ctrl elsewhere.
+Latest recorded local proof (2026-10-30, plan 26): **28 Node tests** and **120 Playwright cases** (40 per engine across Chromium, Firefox and WebKit) on macOS; the plan 25 head passed the nine-job CI matrix ([run 40967319567](https://github.com/recircuitcoop/review/actions/runs/40967319567)). The earlier [green CI run](https://github.com/recircuitcoop/review/actions/runs/39318606377) covers 17 Node tests and 10 browser tests per job; it does not cover subsequent changes. Displayed shortcuts use Cmd on macOS and Ctrl elsewhere.
 
 ## Newly requested interaction work
 

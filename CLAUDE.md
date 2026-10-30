@@ -40,7 +40,7 @@ Do not add accounts, backend storage, collaboration, model suggestions, mutable-
 - Export only committed annotations, in document order within each label. Include metadata, canonical text, offset conventions, labels, and quote/context anchors. Empty label groups remain present; unselected text stays unlabeled.
 - Done resolves pending selections before completion. Save failure must leave the session available for retry.
 - Sanitize rendered HTML. Preserve document read-only behavior, focus, accessibility, native selection, editable-field and IME handling, and host shortcut boundaries.
-- Selection, append, label, undo/redo and whisper changes never move document text: the whisper is an overlay below its block and never changes a block's margin or size. A pending range's swipe hit area covers its text lines, every block it fully covers, and the gaps between consecutive covered blocks, so a click anywhere in a block can be followed by a swipe in place.
+- Selection, append, label, undo/redo and whisper changes never move document text: the whisper is an overlay below its block and never changes a block's margin or size. A pending range's swipe hit area is recorded when the range is made: its text lines, plus for a click/Enter scope the covered blocks (list items reach left over their marker) and, for a section, the band between them; 1px tolerance. A click anywhere in a block, its bullet included, can be followed by a swipe in place. The wheel path reads only those pieces' live geometry, never offset mapping or a document walk.
 - Reflow, scrolling, resizing, and font loading cannot change text offsets. Changing the document or labels requires explicit reset or validated reload.
 
 ## First implementation checkpoint
