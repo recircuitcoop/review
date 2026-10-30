@@ -2977,6 +2977,24 @@ function installPointerInput(ctx) {
     const rectangles = [...text2.range(anchor.start, anchor.end).getClientRects()];
     return rectangles.some((r) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom);
   }
+  const inside = (r, x2, y2) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom;
+  function hitPending(range, x2, y2) {
+    if (hitRange(range, x2, y2)) return true;
+    const covered = [...surface.querySelectorAll(BLOCK_SELECTOR)].filter((block) => {
+      const contents = document.createRange();
+      contents.selectNodeContents(block);
+      const { start, end } = text2.fromRange(contents);
+      const last = text2.contentEnd(end);
+      return start < last && start >= range.start && last <= range.end;
+    }).map((block) => block.getBoundingClientRect());
+    if (!covered.length) return false;
+    if (covered.some((rect) => inside(rect, x2, y2))) return true;
+    if (covered.length < 2) return false;
+    const column = surface.getBoundingClientRect();
+    const top = Math.min(...covered.map((rect) => rect.top));
+    const bottom = Math.max(...covered.map((rect) => rect.bottom));
+    return inside({ left: column.left, right: column.right, top, bottom }, x2, y2);
+  }
   listen(surface, "pointerdown", (event) => {
     if (event.button !== 0 || !event.isPrimary) return;
     press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target, shift: event.shiftKey };
@@ -3039,7 +3057,7 @@ function installPointerInput(ctx) {
     if (dialogs.isOpen) return;
     ctx.syncSelection();
     const ranges = state.pendingRanges;
-    if (!ranges.some((range) => hitRange(range, event.clientX, event.clientY))) return;
+    if (!ranges.some((range) => hitPending(range, event.clientX, event.clientY))) return;
     event.preventDefault();
     lastCanceled = event.timeStamp;
     ctx.classify(event.deltaX < 0 ? left : right);

@@ -133,8 +133,10 @@ main { max-width: 1428px; padding: 2rem 1.5rem 4rem; margin: auto; }
 .review-document { font-family: var(--review-document-font); font-size: var(--review-document-size); line-height: var(--review-document-line-height); padding: var(--review-document-padding); min-height: 25rem; overflow-wrap: anywhere; }
 .review-document :is(h1, h2, h3, h4, h5, h6) { font-family: var(--review-heading-font); letter-spacing: var(--review-heading-spacing); line-height: var(--review-heading-line-height); }
 .review-document h1 { font-size: var(--review-heading-size); }
-/* One uniform block spacing, sized to hold one whisper line, so the whisper never needs extra room. */
-.review-document :is(p, h1, h2, h3, h4, h5, h6, ul, ol, li, pre, blockquote) { margin-top: 0; margin-bottom: var(--review-paragraph-spacing); }
+/* Paragraphs and code blocks, the usual whisper anchors, keep a bottom spacing that holds one whisper line.
+   Headings, lists and quotes keep their native spacing; a whisper there overlays the next line (opaque, inert). */
+.review-document p { margin: 0 0 var(--review-paragraph-spacing); }
+.review-document pre { margin-bottom: var(--review-paragraph-spacing); }
 .review-document a { color: var(--review-link); text-decoration-style: dotted; }
 .review-document pre { background: var(--review-code); padding: var(--review-code-padding); overflow: auto; line-height: var(--review-code-line-height); border-radius: var(--review-code-radius); white-space: pre-wrap; }
 .review-document code { font-family: var(--review-code-font); font-size: var(--review-code-size); line-height: var(--review-code-line-height); }
@@ -3213,6 +3215,24 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       const rectangles = [...text2.range(anchor.start, anchor.end).getClientRects()];
       return rectangles.some((r) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom);
     }
+    const inside = (r, x2, y2) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom;
+    function hitPending(range, x2, y2) {
+      if (hitRange(range, x2, y2)) return true;
+      const covered = [...surface.querySelectorAll(BLOCK_SELECTOR)].filter((block) => {
+        const contents = document.createRange();
+        contents.selectNodeContents(block);
+        const { start, end } = text2.fromRange(contents);
+        const last = text2.contentEnd(end);
+        return start < last && start >= range.start && last <= range.end;
+      }).map((block) => block.getBoundingClientRect());
+      if (!covered.length) return false;
+      if (covered.some((rect) => inside(rect, x2, y2))) return true;
+      if (covered.length < 2) return false;
+      const column = surface.getBoundingClientRect();
+      const top = Math.min(...covered.map((rect) => rect.top));
+      const bottom = Math.max(...covered.map((rect) => rect.bottom));
+      return inside({ left: column.left, right: column.right, top, bottom }, x2, y2);
+    }
     listen(surface, "pointerdown", (event) => {
       if (event.button !== 0 || !event.isPrimary) return;
       press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target, shift: event.shiftKey };
@@ -3275,7 +3295,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       if (dialogs.isOpen) return;
       ctx.syncSelection();
       const ranges = state.pendingRanges;
-      if (!ranges.some((range) => hitRange(range, event.clientX, event.clientY))) return;
+      if (!ranges.some((range) => hitPending(range, event.clientX, event.clientY))) return;
       event.preventDefault();
       lastCanceled = event.timeStamp;
       ctx.classify(event.deltaX < 0 ? left : right);
