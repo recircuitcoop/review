@@ -5,8 +5,8 @@ import { selectableBlock } from './render.js';
 const CONTINUATION_GAP_MS = 200;
 
 /**
- * Pointer-device input on the document surface: click-to-select blocks, clicks on
- * saved highlights, and native horizontal scrolling over the pending range.
+ * Pointer-device input on the document surface: click-to-select scopes, Shift-append,
+ * clicks on saved highlights, and native horizontal scrolling over pending ranges.
  * Pointer presses never label; drags stay native text selection.
  * The annotator supplies shared operations through `ctx`, so a wheel label commits
  * through the same `classify` path as buttons and keys.
@@ -18,12 +18,18 @@ export function installPointerInput(ctx) {
   // When the last wheel event of a labeling gesture was canceled.
   let lastCanceled = -Infinity;
 
-  function pointAt(x, y) {
+  /** The DOM caret position under a viewport point, inside the surface, or null. */
+  function caretAt(x, y) {
     const point = document.caretPositionFromPoint?.(x, y);
-    if (point && surface.contains(point.offsetNode)) return text.offset(point.offsetNode, point.offset);
+    if (point && surface.contains(point.offsetNode)) return { node: point.offsetNode, offset: point.offset };
     const range = document.caretRangeFromPoint?.(x, y);
-    if (range && surface.contains(range.startContainer)) return text.offset(range.startContainer, range.startOffset);
+    if (range && surface.contains(range.startContainer)) return { node: range.startContainer, offset: range.startOffset };
     return null;
+  }
+
+  function pointAt(x, y) {
+    const caret = caretAt(x, y);
+    return caret ? text.offset(caret.node, caret.offset) : null;
   }
 
   /** Whether a viewport point lies on the rendered rectangles of a text range, read now. */
@@ -35,7 +41,13 @@ export function installPointerInput(ctx) {
   // No preventDefault or capture: a press on pending text starts native text selection.
   listen(surface, 'pointerdown', event => {
     if (event.button !== 0 || !event.isPrimary) return;
-    press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target };
+    press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target, shift: event.shiftKey };
+    if (!event.shiftKey) return;
+    // Shift+press would extend the old native selection into one spanning range. Collapse it
+    // at the press point instead, so a Shift+drag selects exactly from here.
+    const caret = caretAt(event.clientX, event.clientY);
+    if (caret) getSelection().collapse(caret.node, caret.offset);
+    else getSelection().removeAllRanges();
   });
 
   listen(surface, 'pointerup', event => safe(() => {
@@ -46,42 +58,48 @@ export function installPointerInput(ctx) {
     const dy = event.clientY - current.y;
     // A drag (even one pixel that produced a native range) keeps its exact range.
     if (ctx.nativeRange() || Math.hypot(dx, dy) > 4) {
-      ctx.syncSelection();
+      if (current.shift) ctx.appendNative();
+      else ctx.syncSelection();
       return;
     }
-    const at = pointAt(event.clientX, event.clientY);
-    const saved = at === null ? [] : state.read().filter(a => at >= a.start && at < a.end && hitRange(a, event.clientX, event.clientY));
     ctx.resetNative();
     ctx.exitPrecise();
-    if (saved.length > 1) {
-      ctx.chooseOverlap(saved);
-      return;
-    }
-    if (saved.length === 1) {
-      ctx.activate(saved[0].id);
-      return;
+    // Shift+click always appends the clicked scope; saved-highlight precedence is for plain clicks.
+    if (!current.shift) {
+      const at = pointAt(event.clientX, event.clientY);
+      const saved = at === null ? [] : state.read().filter(a => at >= a.start && at < a.end && hitRange(a, event.clientX, event.clientY));
+      if (saved.length > 1) {
+        ctx.chooseOverlap(saved);
+        return;
+      }
+      if (saved.length === 1) {
+        ctx.activate(saved[0].id);
+        return;
+      }
     }
     const block = selectableBlock(current.target);
     if (block && surface.contains(block)) {
       block.focus({ preventScroll: true });
-      ctx.selectBlock();
+      ctx.selectBlock(current.shift);
       return;
     }
-    state.clear();
+    if (!current.shift) state.clear();
   }));
 
   listen(surface, 'pointercancel', () => {
     press = null;
   });
   // A drag that leaves the surface still produces its native range on release.
-  listen(document, 'pointerup', event => {
+  listen(document, 'pointerup', event => safe(() => {
     if (!press || surface.contains(event.target)) return;
+    const current = press;
     press = null;
-    ctx.syncSelection();
-  });
+    if (current.shift) ctx.appendNative();
+    else ctx.syncSelection();
+  }));
 
   // Plan 25 trigger rule with plan 26 cancellation: browser-reported pure horizontal scrolling
-  // over the pending range labels it once. That event and the rest of its
+  // over a pending range labels every pending range once. That event and the rest of its
   // gesture are canceled so the browser's back/forward history swipe cannot also run.
   // Everything else (vertical, mixed, zoom, unrelated horizontal) is left to the browser.
   listen(surface, 'wheel', event => safe(() => {
@@ -99,10 +117,9 @@ export function installPointerInput(ctx) {
     if (dialogs.isOpen) return;
     // Mirror any native range first so the hit test uses the current pending target.
     ctx.syncSelection();
-    const pending = state.pending;
     // Without a pending range classify would relabel an active saved annotation; wheel never does.
-    if (!pending) return;
-    if (!hitRange(pending, event.clientX, event.clientY)) return;
+    const ranges = state.pendingRanges;
+    if (!ranges.some(range => hitRange(range, event.clientX, event.clientY))) return;
     event.preventDefault();
     lastCanceled = event.timeStamp;
     ctx.classify(event.deltaX < 0 ? left : right);

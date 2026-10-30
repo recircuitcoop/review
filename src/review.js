@@ -2,7 +2,7 @@ import { ReviewSession, validateOptions } from './model.js';
 import { canonicalText } from './text.js';
 import { applyReviewStyles } from './styles.js';
 import { shortcutMap } from './shortcuts.js';
-import { BLOCK_SELECTOR, element, highlightNames, highlightStyle, icon, paintHighlights, paintWhisper, renderMarkdown, renderSavedList, repositionWhisper, selectableBlock } from './render.js';
+import { BLOCK_SELECTOR, blockScope, element, highlightNames, highlightStyle, icon, paintHighlights, paintWhisper, renderMarkdown, renderSavedList, repositionWhisper, selectableBlock } from './render.js';
 import { choiceList, createDialogs, shortcutHelp } from './dialogs.js';
 import { installPointerInput } from './pointer.js';
 export { defaultReviewStyles } from './styles.js';
@@ -162,10 +162,12 @@ export function mountReview(container, options) {
     const annotations = state.read();
     const pending = state.pending;
     const active = annotations.find(a => a.id === state.activeId);
-    paintHighlights({ names, text, labels, annotations, pending, active });
+    const ranges = state.pendingRanges;
+    paintHighlights({ names, text, labels, annotations, pending: ranges, active });
     renderSavedList({ list, count, labels, annotations, activeId: state.activeId });
     paintWhisperNow();
-    if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
+    if (ranges.length > 1) announce(`Selected ${ranges.length} ranges. Latest: ${pending.quote.slice(0, 100)}`);
+    else if (pending) announce(`Selected ${pending.quote.length} characters: ${pending.quote.slice(0, 100)}`);
     else if (active) announce(`Editing ${labelName(active.labelId)}: ${active.quote.slice(0, 100)}`);
   }
 
@@ -176,13 +178,17 @@ export function mountReview(container, options) {
   }
   // A pointer press holds the whisper in place until release; then it follows the new target.
   let pointerHeld = false;
+  // A Shift press appends on release, so its in-progress native range must not replace the pending set.
+  let appending = false;
   function releasePointer() {
+    appending = false;
     if (!pointerHeld) return;
     pointerHeld = false;
     if (!destroyed) safe(paintWhisperNow);
   }
-  listen(surface, 'pointerdown', () => {
+  listen(surface, 'pointerdown', event => {
     pointerHeld = true;
+    appending = event.shiftKey;
   });
   listen(document, 'pointerup', releasePointer);
   listen(document, 'pointercancel', releasePointer);
@@ -202,9 +208,9 @@ export function mountReview(container, options) {
     if (!surface.contains(range.startContainer) || !surface.contains(range.endContainer)) return null;
     return range;
   }
-  /** Mirror the native range into the pending selection. Open dialogs freeze it. */
+  /** Mirror the native range into the pending selection. Open dialogs and Shift presses freeze it. */
   function syncSelection() {
-    if (destroyed || dialogs.isOpen) return;
+    if (destroyed || dialogs.isOpen || appending) return;
     const range = nativeRange();
     if (!range) return;
     const { start, end } = text.fromRange(range);
@@ -213,6 +219,15 @@ export function mountReview(container, options) {
   }
   function resetNative() {
     if (nativeRange()) getSelection().removeAllRanges();
+  }
+  /** Shift+drag: add the dragged native range to the pending set, then let the highlight paint it. */
+  function appendNative() {
+    const range = nativeRange();
+    if (!range) return;
+    const { start, end } = text.fromRange(range);
+    // Native Selection holds one range; clearing it leaves every pending range to the highlight.
+    resetNative();
+    if (start < end) state.add(start, end);
   }
 
   // --- Operations shared by buttons, keys, clicks and wheel -----------------
@@ -262,17 +277,17 @@ export function mountReview(container, options) {
     blocks[next].focus();
     return true;
   }
-  function selectBlock() {
+  /** Select the focused block's scope (heading section, list hierarchy, or block); `append` adds it instead. */
+  function selectBlock(append = false) {
     const focusedInside = surface.contains(document.activeElement);
     const block = focusedInside ? selectableBlock(document.activeElement) ?? focusedBlock : focusedBlock;
     // No block yet: the first Enter focuses one instead of selecting.
     if (!block) return moveBlock(1);
     if (!(block instanceof HTMLElement) || !surface.contains(block) || !block.matches(BLOCK_SELECTOR)) return false;
-    const range = document.createRange();
-    range.selectNodeContents(block);
-    const positions = text.fromRange(range);
-    if (positions.start < positions.end) {
-      state.select(positions.start, positions.end);
+    const { start, end } = blockScope(surface, text, block);
+    if (start < end) {
+      if (append) state.add(start, end);
+      else state.select(start, end);
       resetNative();
     }
     return true;
@@ -399,7 +414,7 @@ export function mountReview(container, options) {
     previousBlock: () => moveBlock(-1),
     nextAnnotation: () => navigateAnnotation(1),
     previousAnnotation: () => navigateAnnotation(-1),
-    selectBlock,
+    selectBlock: () => selectBlock(),
     precise: togglePrecise,
     help: showHelp,
     finish() {
@@ -502,6 +517,7 @@ export function mountReview(container, options) {
     safe,
     classify,
     syncSelection,
+    appendNative,
     nativeRange,
     resetNative,
     exitPrecise() {

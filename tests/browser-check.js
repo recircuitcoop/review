@@ -280,7 +280,8 @@ await check('Every toolbar command and keyboard dispatcher path uses the shared 
     surface.focus(); key(surface, 'ArrowDown', { altKey: true }); equal(document.activeElement.tagName, 'H1');
     key(document.activeElement, 'ArrowDown', { altKey: true }); equal(document.activeElement.tagName, 'P');
     key(document.activeElement, 'ArrowUp', { altKey: true }); equal(document.activeElement.tagName, 'H1');
-    key(document.activeElement, 'Enter'); equal(selection.quote, 'Hi');
+    // Enter shares the click scope: the only h1 selects its section, the whole document.
+    key(document.activeElement, 'Enter'); equal(selection.quote, review.export().document.text);
     key(document.activeElement, 'ArrowLeft', { altKey: true }); equal(review.read().length, 1);
     click(container, 'nextBlock'); click(container, 'selectBlock'); click(container, 'right'); equal(review.read().length, 2);
     click(container, 'previousBlock'); equal(document.activeElement.tagName, 'H1');

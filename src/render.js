@@ -17,6 +17,28 @@ export function selectableBlock(target) {
   return target.closest('li,pre') ?? target.closest(BLOCK_SELECTOR);
 }
 
+/**
+ * The canonical range a click or Enter on `block` selects. A heading takes its section, up to
+ * the next heading of the same or higher rank; a list item takes its nested hierarchy.
+ */
+export function blockScope(surface, text, block) {
+  const contents = document.createRange();
+  contents.selectNodeContents(block);
+  const { start, end } = text.fromRange(contents);
+  const level = Number(/^H([1-6])$/.exec(block.tagName)?.[1]);
+  if (level) {
+    const next = [...surface.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+      .find(h => block.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING && Number(h.tagName[1]) <= level);
+    if (!next) return { start, end: text.text.length };
+    contents.selectNodeContents(next);
+    // Exactly one block separator precedes the next heading; it is not part of the section.
+    return { start, end: text.fromRange(contents).start - 1 };
+  }
+  // Nested blocks end with their own separator inside the item; drop it so the range ends on text.
+  if (block.querySelector(BLOCK_SELECTOR) && text.text[end - 1] === '\n') return { start, end: end - 1 };
+  return { start, end };
+}
+
 /** Render sanitized Markdown into the surface and return its keyboard-focusable blocks in document order. */
 export function renderMarkdown(surface, markdown) {
   const html = marked.parse(markdown, { gfm: false });
@@ -49,15 +71,14 @@ export function highlightStyle(names) {
   ].join(' ');
 }
 
-/** Replace all four highlight sets from committed state; highlights never touch the document DOM. */
+/** Replace all four highlight sets from session state (`pending` lists every pending range); highlights never touch the document DOM. */
 export function paintHighlights({ names, text, labels, annotations, pending, active }) {
   for (const direction of ['left', 'right']) {
     const label = labels.find(l => l.direction === direction);
     const ranges = annotations.filter(a => a.labelId === label.id).map(a => text.range(a.start, a.end));
     CSS.highlights.set(names[direction], new Highlight(...ranges));
   }
-  const pendingRanges = pending ? [text.range(pending.start, pending.end)] : [];
-  CSS.highlights.set(names.pending, new Highlight(...pendingRanges));
+  CSS.highlights.set(names.pending, new Highlight(...pending.map(p => text.range(p.start, p.end))));
   const activeRanges = active ? [text.range(active.start, active.end)] : [];
   CSS.highlights.set(names.active, new Highlight(...activeRanges));
 }
