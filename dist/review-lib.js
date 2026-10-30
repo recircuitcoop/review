@@ -2700,13 +2700,15 @@ function blockScope(surface, text2, block) {
   const level = Number(/^H([1-6])$/.exec(block.tagName)?.[1]);
   if (level) {
     const next = [...surface.querySelectorAll("h1,h2,h3,h4,h5,h6")].find((h) => block.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING && Number(h.tagName[1]) <= level);
-    if (!next) return { start, end: text2.text.length };
+    const elements = [block];
+    for (let node = block.nextElementSibling; node && !(next && node.contains(next)); node = node.nextElementSibling) elements.push(node);
+    if (!next) return { start, end: text2.text.length, elements };
     const section = document.createRange();
     section.setStart(contents.startContainer, contents.startOffset);
     section.setEndBefore(next);
-    return { start, end: text2.contentEnd(text2.fromRange(section).end) };
+    return { start, end: text2.contentEnd(text2.fromRange(section).end), elements };
   }
-  return { start, end: text2.contentEnd(end) };
+  return { start, end: text2.contentEnd(end), elements: [block] };
 }
 function renderMarkdown(surface, markdown) {
   const html2 = g.parse(markdown, { gfm: false });
@@ -2977,24 +2979,6 @@ function installPointerInput(ctx) {
     const rectangles = [...text2.range(anchor.start, anchor.end).getClientRects()];
     return rectangles.some((r) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom);
   }
-  const inside = (r, x2, y2) => x2 >= r.left && x2 <= r.right && y2 >= r.top && y2 <= r.bottom;
-  function hitPending(range, x2, y2) {
-    if (hitRange(range, x2, y2)) return true;
-    const covered = [...surface.querySelectorAll(BLOCK_SELECTOR)].filter((block) => {
-      const contents = document.createRange();
-      contents.selectNodeContents(block);
-      const { start, end } = text2.fromRange(contents);
-      const last = text2.contentEnd(end);
-      return start < last && start >= range.start && last <= range.end;
-    }).map((block) => block.getBoundingClientRect());
-    if (!covered.length) return false;
-    if (covered.some((rect) => inside(rect, x2, y2))) return true;
-    if (covered.length < 2) return false;
-    const column = surface.getBoundingClientRect();
-    const top = Math.min(...covered.map((rect) => rect.top));
-    const bottom = Math.max(...covered.map((rect) => rect.bottom));
-    return inside({ left: column.left, right: column.right, top, bottom }, x2, y2);
-  }
   listen(surface, "pointerdown", (event) => {
     if (event.button !== 0 || !event.isPrimary) return;
     press = { id: event.pointerId, x: event.clientX, y: event.clientY, target: event.target, shift: event.shiftKey };
@@ -3055,9 +3039,7 @@ function installPointerInput(ctx) {
       return;
     }
     if (dialogs.isOpen) return;
-    ctx.syncSelection();
-    const ranges = state.pendingRanges;
-    if (!ranges.some((range) => hitPending(range, event.clientX, event.clientY))) return;
+    if (!ctx.hitsPending(event.clientX, event.clientY)) return;
     event.preventDefault();
     lastCanceled = event.timeStamp;
     ctx.classify(event.deltaX < 0 ? left : right);
@@ -3242,7 +3224,10 @@ function mountReview(container, options) {
     if (!range) return;
     const { start, end } = text2.fromRange(range);
     const unchanged = state.pending?.start === start && state.pending?.end === end;
-    if (start < end && !unchanged) state.select(start, end);
+    if (start < end && !unchanged) {
+      state.select(start, end);
+      rememberHitArea(start, end, range.cloneRange());
+    }
   }
   function resetNative() {
     if (nativeRange()) getSelection().removeAllRanges();
@@ -3252,7 +3237,39 @@ function mountReview(container, options) {
     if (!range) return;
     const { start, end } = text2.fromRange(range);
     resetNative();
-    if (start < end) state.add(start, end);
+    if (start < end) {
+      state.add(start, end);
+      rememberHitArea(start, end, text2.range(start, end));
+    }
+  }
+  let hitAreas = [];
+  const within = (entry, range) => entry.start >= range.start && entry.end <= range.end;
+  function rememberHitArea(start, end, range, elements = []) {
+    const pending = state.pendingRanges;
+    hitAreas = hitAreas.filter((entry) => pending.some((r) => within(entry, r)));
+    hitAreas.push({ start, end, range, elements });
+  }
+  const TOLERANCE = 1;
+  const inside = (r, x2, y2) => x2 >= r.left - TOLERANCE && x2 <= r.right + TOLERANCE && y2 >= r.top - TOLERANCE && y2 <= r.bottom + TOLERANCE;
+  function blockBox(element2) {
+    const rect = element2.getBoundingClientRect();
+    if (element2.tagName !== "LI" || !element2.parentElement) return rect;
+    return { left: Math.min(rect.left, element2.parentElement.getBoundingClientRect().left), right: rect.right, top: rect.top, bottom: rect.bottom };
+  }
+  function hitsPending(x2, y2) {
+    for (const range of state.pendingRanges) {
+      for (const entry of hitAreas) {
+        if (!within(entry, range)) continue;
+        if ([...entry.range.getClientRects()].some((r) => inside(r, x2, y2))) return true;
+        const boxes = entry.elements.map(blockBox);
+        if (boxes.some((box) => inside(box, x2, y2))) return true;
+        if (boxes.length > 1) {
+          const column = surface.getBoundingClientRect();
+          if (inside({ left: column.left, right: column.right, top: boxes[0].top, bottom: boxes.at(-1).bottom }, x2, y2)) return true;
+        }
+      }
+    }
+    return false;
   }
   function classify(label) {
     syncSelection();
@@ -3301,10 +3318,11 @@ function mountReview(container, options) {
     const block = focusedInside ? selectableBlock(document.activeElement) ?? focusedBlock : focusedBlock;
     if (!block) return moveBlock(1);
     if (!(block instanceof HTMLElement) || !surface.contains(block) || !block.matches(BLOCK_SELECTOR)) return false;
-    const { start, end } = blockScope(surface, text2, block);
+    const { start, end, elements } = blockScope(surface, text2, block);
     if (start < end) {
       if (append) state.add(start, end);
       else state.select(start, end);
+      rememberHitArea(start, end, text2.range(start, end), elements);
       resetNative();
     }
     return true;
@@ -3514,6 +3532,7 @@ function mountReview(container, options) {
     classify,
     syncSelection,
     appendNative,
+    hitsPending,
     nativeRange,
     resetNative,
     exitPrecise() {
@@ -3572,7 +3591,9 @@ function mountReview(container, options) {
       guard();
       state.anchor(start, end);
       resetNative();
-      return state.select(start, end);
+      const selected = state.select(start, end);
+      rememberHitArea(start, end, text2.range(start, end));
+      return selected;
     },
     clear() {
       guard();
