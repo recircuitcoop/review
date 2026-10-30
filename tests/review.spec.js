@@ -516,4 +516,56 @@ test.describe('heading sections and nested lists (sections.md)', () => {
     await block(page, 'h2', 'A').click();
     expect(await label(page)).toEqual(['A\nitem']);
   });
+
+  test('a click anywhere in a block, then a swipe in place, labels and cancels', async ({ page }) => {
+    await recordWheels(page);
+    // Right edge of a one-line paragraph, far from its text.
+    const intro = block(page, 'p', 'Section intro');
+    const introBox = await intro.boundingBox();
+    await intro.click({ position: { x: introBox.width - 4, y: 8 } });
+    await page.mouse.wheel(-40, 0);
+    await expect.poll(() => page.evaluate(() => review.read().length)).toBe(1);
+    await page.waitForTimeout(300);
+    // Whitespace after the short last line of a wrapping paragraph.
+    const long = block(page, 'p', 'A long closing paragraph');
+    await long.evaluate(node => node.scrollIntoView({ block: 'center' }));
+    const longBox = await long.boundingBox();
+    await long.click({ position: { x: longBox.width - 4, y: longBox.height - 6 } });
+    await page.mouse.wheel(40, 0);
+    await expect.poll(() => page.evaluate(() => review.read().length)).toBe(2);
+    expect(await page.evaluate(() => review.read().map(a => [a.quote.slice(0, 13), a.labelId]))).toEqual([['Section intro', 'accept'], ['A long closin', 'reject']]);
+    expect(await page.evaluate(() => wheels)).toEqual([true, true]);
+  });
+
+  test('a selected section labels from the gap between its blocks, not after its last block or beyond the column', async ({ page }) => {
+    await recordWheels(page);
+    await block(page, 'h2', 'Second section').click(AT_TEXT);
+    const surface = await page.locator('.review-document').boundingBox();
+    // The gap after the last covered block is outside the hit area.
+    const closing = await block(page, 'p', 'Nested topic closing').boundingBox();
+    await page.mouse.move(closing.x + 200, closing.y + closing.height + 10);
+    await page.mouse.wheel(40, 0);
+    await expect.poll(() => page.evaluate(() => wheels.length)).toBe(1);
+    // Beyond the document column (over the saved-annotations sidebar).
+    const intro = await block(page, 'p', 'Section intro').boundingBox();
+    await page.mouse.move(surface.x + surface.width + 20, intro.y + 8);
+    await page.mouse.wheel(40, 0);
+    await expect.poll(() => page.evaluate(() => wheels.length)).toBe(2);
+    expect(await page.evaluate(() => review.read())).toHaveLength(0);
+    // The gap between two blocks of the section is inside it.
+    await page.mouse.move(intro.x + 300, intro.y + intro.height + 10);
+    await page.mouse.wheel(-40, 0);
+    await expect.poll(() => page.evaluate(() => review.read().length)).toBe(1);
+    expect(await page.evaluate(() => wheels)).toEqual([false, false, true]);
+  });
+});
+
+test('a click in a code block\'s left padding, then a swipe in place, labels and cancels', async ({ page }) => {
+  await page.evaluate(() => { window.wheels = []; addEventListener('wheel', event => wheels.push(event.defaultPrevented)); });
+  const pre = page.locator('.review-document pre');
+  const box = await pre.boundingBox();
+  await pre.click({ position: { x: 4, y: box.height / 2 } });
+  await page.mouse.wheel(-40, 0);
+  await expect.poll(() => page.evaluate(() => review.read().map(a => a.quote))).toEqual(['const value = 42;\n']);
+  expect(await page.evaluate(() => wheels)).toEqual([true]);
 });
