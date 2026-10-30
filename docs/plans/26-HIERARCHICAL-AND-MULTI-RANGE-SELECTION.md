@@ -1,6 +1,6 @@
 # 26 — Hierarchical and multi-range selection
 
-Status: in progress; native back-swipe suppression remains a manual check (see below). Date: 2026-10-30. Branch: `feat/hierarchical-multi-selection`.
+Status: implemented; native back-swipe suppression remains a manual check (see below). Date: 2026-10-30. Branch: `feat/hierarchical-multi-selection`.
 
 Manual testing of the plan 25 build on macOS with a real mouse rejected three behaviours. These user requirements override the conflicting parts of the specification, plan 25 and `CLAUDE.md`, which are updated in place.
 
@@ -35,7 +35,7 @@ Manual testing of the plan 25 build on macOS with a real mouse rejected three be
 
 ## Acceptance
 
-Real mouse/keyboard Playwright cases (`tests/review.spec.js`), all three engines:
+Real mouse/keyboard Playwright cases (`tests/review.spec.js`, on `tests/fixtures/sections.md` via `/tests/fixture.html?doc=sections`; `review.md` stays unchanged because the downloaded `tests/artifacts` label files are bound to its canonical text), all three engines:
 
 - A heading click selects its whole section; a lower-level heading selects only its subsection.
 - A parent list item click selects its nested subtree; a nested item selects only its subtree.
@@ -53,11 +53,16 @@ Browser-check page (`tests/browser-check.js`): wheel checks updated to the cance
 
 - macOS Chrome, Safari and Firefox with Magic Mouse and trackpad: a left swipe over a pending range labels it and the page does not navigate back; a right swipe does not navigate forward; the same swipe outside the selection still navigates.
 
+## Observations (not changed here)
+
+- Canonical format v1 inserts no separator between a list item's own text and its nested list, so a parent item's quote reads `Parent itemChild item…`. Changing it needs a new canonical-format version and would invalidate saved reviews; out of scope.
+- When the whisper moves to a newly selected block below the previous target, the previous block's reserved room is released and the new block shifts up under the pointer (pre-existing plan 23 placement; Shift+click makes it more frequent). Users re-hover before swiping; the tests do the same.
+
 ## Done
 
-- [ ] 1 Docs: spec, CLAUDE.md invariants, plans README, this plan
-- [ ] 2 Failing tests
-- [ ] 3 Wheel cancellation and continuation
-- [ ] 4 Hierarchical click scope
-- [ ] 5 Shift-append pending set and batch commit
-- [ ] 6 Gates: `CI=1 npm run check`, `npm run build`, records
+- [x] 1 Docs: spec, CLAUDE.md invariants, plans README, this plan
+- [x] 2 Failing tests
+- [x] 3 Wheel cancellation and continuation
+- [x] 4 Hierarchical click scope
+- [x] 5 Shift-append pending set and batch commit
+- [x] 6 Gates: `CI=1 npm run check`, `npm run build`, records
