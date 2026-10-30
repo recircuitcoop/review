@@ -49,6 +49,7 @@ Keep accessibility in every interaction slice. Use real browser tests for select
 | [23 — Widget high fidelity](23-WIDGET-HIGH-FIDELITY.md) | Refine the approved composition, palettes, typography and control states for user review. | 21/22 accepted lo-fi; before production UI |
 | [24 — Instance style configuration](24-INSTANCE-STYLE-CONFIGURATION.md) | Configure background, colours, buttons, typography, spacing and borders at mount; retain approved defaults. | 23 approved visual style |
 | [25 — Assessment remediation](25-ASSESSMENT-REMEDIATION.md) | Keep Export, implement 18 and 23, refactor the controller, fix defects, refresh records, land with green CI. | 18, 23 |
+| [26 — Hierarchical and multi-range selection](26-HIERARCHICAL-AND-MULTI-RANGE-SELECTION.md) | Heading/list hierarchy clicks, Shift-append pending ranges labeled together, and canceled labeling swipes so a left swipe never navigates back. | 25 |
 
 ## Acceptance coverage
 
@@ -56,10 +57,10 @@ Numbers refer to the seed's “Acceptance conditions.” Plan 13 verifies all co
 
 | Seed condition | Owning plans |
 | --- | --- |
-| 1 — Block click versus exact drag | 04 |
+| 1 — Block click versus exact drag | 04, 26 |
 | 2 — Formatted and cross-paragraph quotes/positions | 03, 08 |
-| 3 — Pending versus committed; one commit per swipe | 04, 05, 07 |
-| 4 — Canceled gestures and scrolling | 07 |
+| 3 — Pending versus committed; one commit per swipe | 04, 05, 07, 26 |
+| 4 — Canceled gestures and scrolling | 07, 26 |
 | 5 — Edit/history/highlight/export consistency | 06, 08 |
 | 6 — Resolve pending selection on Done | 12 |
 | 7 — Export/restore identity | 08, 09 |

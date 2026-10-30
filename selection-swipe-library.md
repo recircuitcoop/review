@@ -21,36 +21,38 @@ The host application supplies a Markdown document and two preset labels, one for
 | Action | Behavior |
 | --- | --- |
 | Click a paragraph | Select its entire textual content. |
-| Click a heading or subtitle | Select its entire textual content. |
-| Click a list item | Select that item's entire textual content, including its nested content. A nested item click selects the nested item. |
+| Click a heading or subtitle | Select the whole section: from the heading through the end of the last block before the next heading of the same or higher rank (or the document end). |
+| Click a list item | Select that item and its whole nested hierarchy. A nested item click selects only the nested item's own hierarchy. A paragraph inside a loose-list item selects the item. |
 | Click a fenced code block | Select the whole code block, preserving its whitespace. |
-| Click and drag across text | Select exactly the resulting text range, including a range crossing formatting or paragraph boundaries. |
+| Click and drag across text | Select exactly the resulting text range, including a range crossing formatting or paragraph boundaries. Dragging is the only exception to the hierarchy rule. |
+| Shift+click / Shift+drag | Add the clicked scope (same hierarchy rule) or the exact dragged range to the pending selection instead of replacing it. Overlapping or touching ranges merge. |
 | Click outside the active selection | Clear the pending selection; select another supported block if applicable. |
-| Press Escape | Cancel the pending selection. |
+| Press Escape | Cancel every pending range. |
 
 The active selection receives a distinct highlight. Selection alone does not assign a label or create a committed annotation.
 
-Click and drag takes precedence over block selection. The library waits until the pointer is released to distinguish a click from a text-selection gesture. Empty selections are ignored.
+A pending selection may hold several contiguous ranges built with Shift; each still becomes its own contiguous annotation, and all of them commit together with one label. Click and drag takes precedence over block selection. The library waits until the pointer is released to distinguish a click from a text-selection gesture. Empty selections are ignored.
 
 ### Assign a label
 
-After establishing a selection, the user hovers its highlighted area and scrolls horizontally using the device's native input (trackpad, tilt wheel or Shift+wheel where the browser reports horizontal scrolling). This is the desktop “swipe”:
+After establishing a selection, the user hovers any of its highlighted ranges and scrolls horizontally using the device's native input (trackpad, tilt wheel or Shift+wheel where the browser reports horizontal scrolling). This is the desktop “swipe”:
 
 - Scrolling left assigns the configured left label.
 - Scrolling right assigns the configured right label.
 - Vertical, mixed-axis or zoom input, or input outside the pending highlight, leaves the selection pending.
+- One labeling scroll commits every pending range with that label, as one undoable step.
 
 The contextual whisper attached to the pending passage names both configured labels at their directions before assignment. The document layout remains stable. A multiline selection behaves as one item. Dragging that begins on highlighted text adjusts the native text selection; it never labels.
 
-After a successful assignment, the library commits the annotation, colors the passage according to its label, and clears the active selection. The user can immediately select another passage.
+After a successful assignment, the library commits one annotation per pending range, colors the passage according to its label, and clears the active selection. The user can immediately select another passage.
 
 Visible label buttons and keyboard actions provide equivalent classification without swiping. Undo reverses the latest committed annotation action.
 
 ### Desktop and mobile interaction correction
 
-The user requested a UX correction after finding desktop pointer “swiping” unclear. The desktop flow is **select a passage → hover its pending highlight → scroll left/right using the device's native horizontal scrolling → assign that configured label**. Do not require dragging selected text or a desktop drag handle. Do not implement custom diagonal/axis-ratio recognition, convert vertical scrolling into labels, or suppress native scrolling, zoom or browser navigation. Ordinary mice without horizontal input retain the label buttons and keyboard alternatives. Only a pending selection can be labeled this way; saved text is not implicitly relabeled by scrolling.
+The user requested a UX correction after finding desktop pointer “swiping” unclear. The desktop flow is **select a passage → hover its pending highlight → scroll left/right using the device's native horizontal scrolling → assign that configured label**. Do not require dragging selected text or a desktop drag handle. Do not implement custom diagonal/axis-ratio recognition, convert vertical scrolling into labels, or suppress native scrolling, zoom or browser navigation outside a labeling gesture. Ordinary mice without horizontal input retain the label buttons and keyboard alternatives. Only a pending selection can be labeled this way; saved text is not implicitly relabeled by scrolling.
 
-Trigger rule ([plan 25](docs/plans/25-ASSESSMENT-REMEDIATION.md)): a `wheel` event over the exact pending-highlight rectangles whose `deltaX` is nonzero and `deltaY` is zero labels once (`deltaX < 0` left, `> 0` right). Events with Ctrl/Meta held never label. The library never cancels wheel events. A commit clears the pending range, so later events in the same stream do nothing. The user directed implementation of [18](docs/plans/18-DESKTOP-HOVER-SCROLL-LABELING.md) ahead of the [17](docs/plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md) first-use study; that study and native-device evidence remain open, and no discoverability claim is made.
+Trigger rule ([plan 25](docs/plans/25-ASSESSMENT-REMEDIATION.md)): a `wheel` event over the exact pending-highlight rectangles whose `deltaX` is nonzero and `deltaY` is zero labels once (`deltaX < 0` left, `> 0` right). Events with Ctrl/Meta held never label. The library cancels (`preventDefault()`) exactly the qualifying events, so the browser's back/forward history swipe cannot also run, and the rest of that same horizontal gesture: pure horizontal, non-Ctrl/Meta events arriving within 200 ms of the last canceled one (an implementation tuning value) are canceled and never commit, so late momentum cannot label a newly made selection. Vertical, mixed-axis and zoom input, and horizontal input that neither qualifies nor continues a labeling gesture, is never canceled ([plan 26](docs/plans/26-HIERARCHICAL-AND-MULTI-RANGE-SELECTION.md); user decision after a left swipe navigated back). The user directed implementation of [18](docs/plans/18-DESKTOP-HOVER-SCROLL-LABELING.md) ahead of the [17](docs/plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md) first-use study; that study and native-device evidence remain open, and no discoverability claim is made.
 
 The separately requested mobile flow must preserve native long press, selection handles, vertical scrolling, pinch zoom and browser navigation. Its horizontal touch action needs its own prototype/capability decision and physical-device proof under [19 — Mobile selection and swipe](docs/plans/19-MOBILE-NATIVE-SELECTION-AND-SWIPE.md) and [20 — Input UX acceptance](docs/plans/20-INPUT-UX-ACCEPTANCE.md). Desktop wheel tests do not establish mobile support. Labels, document identity, export format and restored data remain configured through the existing host API; setup/file forms do not enter the mounted widget.
 
@@ -68,13 +70,13 @@ All shortcuts below ship in the initial release. “Mod” means Command on macO
 | --- | --- | --- |
 | Move between controls | Tab / Shift+Tab | Follow normal focus order; enter or leave the document surface without trapping focus. |
 | Move to the next / previous selectable block | Alt+ArrowDown / Alt+ArrowUp | Focus the next / previous paragraph, heading, list item, or fenced code block without assigning a label. |
-| Select the focused block | Enter | Create a pending selection for the entire focused block. On a focused button, Enter activates that button normally. |
+| Select the focused block | Enter | Create a pending selection with the same scope as a click: a heading's whole section, a list item's whole hierarchy, otherwise the block. On a focused button, Enter activates that button normally. |
 | Select an exact text range | Shift+Arrow keys | Extend native text selection from the caret in document text-selection mode. |
 | Extend selection by word | Ctrl+Shift+ArrowLeft/Right (Windows/Linux); Option+Shift+ArrowLeft/Right (macOS) | Preserve native word-selection behavior in text-selection mode. |
 | Enter / leave precise text-selection mode | F2 | Enter browser caret navigation within the focused block, initially at its start; leaving retains a nonempty range as the pending selection. The document remains read-only. |
-| Assign the left label | Alt+ArrowLeft | Label the pending selection, or relabel the single active saved annotation. |
-| Assign the right label | Alt+ArrowRight | Label the pending selection, or relabel the single active saved annotation. |
-| Remove the pending selection | Escape | Clear the pending range and its temporary highlight; leave committed annotations unchanged. |
+| Assign the left label | Alt+ArrowLeft | Label every pending range, or relabel the single active saved annotation. |
+| Assign the right label | Alt+ArrowRight | Label every pending range, or relabel the single active saved annotation. |
+| Remove the pending selection | Escape | Clear every pending range and its temporary highlight; leave committed annotations unchanged. |
 | Deselect a saved annotation | Escape | Exit annotation editing without removing the annotation or its label. |
 | Remove the active selection / saved annotation | Delete / Backspace | Discard a pending selection, or delete the single active saved annotation. Never alter document text. Saved deletion is undoable. |
 | Activate next / previous saved annotation | Alt+N / Alt+P | Navigate in document order, using annotation ID as a stable tie-breaker for identical ranges; scroll the target into view. |
@@ -95,7 +97,7 @@ Do not intercept shortcuts in editable fields, host application controls, or dur
 
 ### Finish
 
-Done completes the session and produces the export payload. If a selection is still pending, the interface asks the user to label it or discard it before completion. A completed session may contain zero annotations.
+Done completes the session and produces the export payload. If a selection is still pending, the interface asks the user to label it (every pending range with the chosen label) or discard it before completion. A completed session may contain zero annotations.
 
 Done automatically invokes the configured export/completion flow through the host. Keep the session available for retry if delivery fails. The mounted interface also keeps a separate **Export files** control and `Mod+Shift+E` shortcut for intermediate exports that do not complete the session (user decision, [plan 25](docs/plans/25-ASSESSMENT-REMEDIATION.md); supersedes plan 22's removal). The library's programmatic export API remains available to hosts.
 
@@ -117,8 +119,9 @@ Both appearances cover document text, code blocks, controls, dialogs, previews, 
 
 ### Proposed defaults requiring UX validation
 
-- Clicking a committed highlight selects that annotation for relabeling or deletion; it takes precedence over selecting the containing paragraph.
-- Beginning a new selection replaces the previous pending selection without committing it.
+- Clicking a committed highlight selects that annotation for relabeling or deletion; it takes precedence over selecting the containing paragraph. Shift+click ignores that precedence and appends the clicked scope; appending while a saved annotation is active ends that edit and starts a new pending set.
+- Beginning a new selection without Shift replaces every pending range without committing it.
+- The contextual whisper follows the most recently added pending range.
 - Scrolling that does not qualify as labeling input leaves the pending selection active.
 - Overlapping committed selections are supported. Each retains its own range and label. A newly selected range takes precedence as the horizontal-scroll labeling target. Clicking overlapping saved highlights opens a keyboard-accessible chooser for the annotation to edit; it never labels or deletes multiple annotations implicitly.
 - Links inside the annotation surface do not navigate on ordinary selection clicks. The host may provide a separate way to open links.
@@ -130,7 +133,8 @@ These defaults complete the initial interaction contract. Local behavior validat
 ### Initial release
 
 - Render a supplied Markdown document as selectable HTML.
-- Select entire paragraphs, headings, list items, and fenced code blocks with a click.
+- Select entire paragraphs, heading sections, list-item hierarchies, and fenced code blocks with a click.
+- Append ranges to the pending selection with Shift+click or Shift+drag and label them together.
 - Select exact contiguous text ranges with click and drag.
 - Assign one of two preset labels through native left/right horizontal scrolling over the pending selection.
 - Show both configured label names at their directions before assignment.
@@ -150,7 +154,7 @@ These defaults complete the initial interaction contract. Local behavior validat
 
 ### Outside the initial scope
 
-Collaborative editing, accounts, model suggestions, backend storage, mutable-document reattachment, image-region annotation, and more than two swipe labels are outside the initial release. Discontinuous selections are also excluded: one annotation represents one contiguous text range.
+Collaborative editing, accounts, model suggestions, backend storage, mutable-document reattachment, image-region annotation, and more than two swipe labels are outside the initial release. Discontinuous annotations are also excluded: one annotation represents one contiguous text range. Shift may build several pending ranges, which commit together as separate contiguous annotations.
 
 Desktop mouse and keyboard interaction on Windows, macOS, and Linux are the initial support targets. Verify current Chromium and Firefox on all three systems and Safari/WebKit where supported; platform-specific modifier maps must preserve equivalent behavior. Touch support uses the same selection-then-label model but needs a separately validated selection interaction using native long press and selection handles.
 
@@ -169,13 +173,13 @@ Render Markdown as ordinary HTML inside an isolated annotation container. “Can
 
 Sanitize rendered HTML before inserting it into the document. The initial Markdown profile supports headings, paragraphs, emphasis, links, lists, blockquotes, and fenced code. Tables and custom HTML extensions require explicit support and selection tests before being advertised.
 
-Click-to-select applies to paragraphs, headings, list items, and fenced code blocks. Clicking text inside a list item selects the nearest containing item; a code block inside an item selects the code block. Inline code follows its containing block. Exact drag selection still takes precedence. Keyboard block navigation and Enter use the same selectable blocks, without duplicate stops on paragraphs/headings inside a list item.
+Click-to-select applies to paragraphs, headings, list items, and fenced code blocks. A heading selects its section and a list item its whole nested hierarchy (see the selection table). Clicking text inside a list item selects the nearest containing item; a code block inside an item selects the code block. Inline code follows its containing block. Exact drag selection still takes precedence. Keyboard block navigation and Enter use the same selectable blocks, without duplicate stops on paragraphs/headings inside a list item.
 
 ### Selection and gesture contract
 
-Maintain only one pending selection at a time. A selection must be nonempty and remain within the annotation container. Ignore interface controls and non-document text when calculating ranges.
+Maintain one pending selection at a time: an ordered set of disjoint contiguous ranges. A plain click or drag replaces it; Shift+click or Shift+drag adds to it, merging overlapping or touching ranges. Each range must be nonempty and remain within the annotation container. Ignore interface controls and non-document text when calculating ranges.
 
-A gesture that establishes a range cannot label it. Labeling requires a separate native horizontal scroll over the pending highlight, under the trigger rule above. Vertical movement preserves normal scrolling and never labels. Pointer drags, including those beginning on highlighted text, only select text. Selection alone remains uncommitted, and all classification continues through one shared command. The original pointer-drag swipe prototype (plan 07) is retired; touch labeling is plan 19 work.
+A gesture that establishes a range cannot label it. Labeling requires a separate native horizontal scroll over any pending range, under the trigger rule above; that scroll and its continuation are canceled so browser history navigation cannot also run. Vertical movement preserves normal scrolling and never labels. Pointer drags, including those beginning on highlighted text, only select text. Selection alone remains uncommitted, and all classification continues through one shared command. The original pointer-drag swipe prototype (plan 07) is retired; touch labeling is plan 19 work.
 
 ### Annotation identity and anchoring
 
@@ -228,10 +232,10 @@ The core operates in the browser without a backend. Session persistence is owned
 
 ### Acceptance conditions
 
-1. A paragraph, heading, list item, or fenced code block click selects that block, while dragging preserves the exact selected range.
+1. A paragraph or fenced code block click selects that block, a heading click selects its section, and a list item click selects its nested hierarchy, while dragging preserves the exact selected range. Shift+click and Shift+drag append ranges; overlapping ranges merge.
 2. A range crossing bold text, links, or paragraph boundaries exports the correct quote and positions.
-3. Selection alone creates no labeled annotation; each qualifying horizontal scroll over pending text creates exactly one committed annotation with the correct label.
-4. Pointer drags, vertical or mixed-axis scrolling and zoom input create no annotations.
+3. Selection alone creates no labeled annotation; each qualifying horizontal scroll over pending text commits exactly one annotation per pending range with the correct label, as one undo step, and is canceled together with its continuation.
+4. Pointer drags, vertical or mixed-axis scrolling and zoom input create no annotations and are never canceled; a gesture continuation never commits a newly made selection.
 5. Relabel, delete, undo, and redo produce consistent highlights and exports.
 6. Done resolves pending selections and returns every committed annotation exactly once.
 7. Export and restore on the same document version preserve identity, labels, positions, and quotes.
