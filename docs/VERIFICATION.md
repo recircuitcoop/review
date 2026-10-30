@@ -7,14 +7,14 @@ Date: 2026-10-30. Branch: `feat/hierarchical-multi-selection`. Command: `CI=1 np
 | Check | Result |
 | --- | --- |
 | Node tests (`npm test`: model, server, files, theme, styles) | **28/28 passed** |
-| Playwright cases (`npm run test:browser`) | **93/93 passed**: 31 per engine across Chromium, Firefox and WebKit, including real-mouse heading/list hierarchy clicks, Shift+click/Shift+drag append, one-swipe batch labeling with a single undo, and wheel cancellation (`defaultPrevented`) cases. The ten plan 26 cases also passed five repeats per engine (150/150). |
+| Playwright cases (`npm run test:browser`) | **102/102 passed**: 34 per engine across Chromium, Firefox and WebKit, including real-mouse heading/list hierarchy clicks, Shift+click/Shift+drag append, one-swipe batch labeling with a single undo, wheel cancellation (`defaultPrevented`) cases, block geometry unchanged by click/Shift+click/label/undo, and click-then-swipe with the pointer unmoved. |
 | Browser-check page (inside `host.spec.js`) | **41/41** in each engine, with the wheel checks updated to the cancellation contract |
 | Browser-check page (`npm run test:page`) | Builds `test-results/browser-check.html`; generation succeeded. It was not opened in a browser for this record. |
 | Host and style checks | Run inside the Playwright suite above (`host.spec.js`, `styles.spec.js`); the reporter prints case counts, not in-page check counts. |
 
 Environment: macOS (Darwin 25.3.0), Node v22.18.0, Playwright 1.58.2 with Chromium 143.0.7499.4, Firefox 146.0.1 and WebKit 26.0 (Playwright's engine builds, not Safari itself).
 
-Changed in plan 26 ([26](plans/26-HIERARCHICAL-AND-MULTI-RANGE-SELECTION.md)): qualifying horizontal wheel input over pending text and its 200 ms continuation are canceled (fixes the left swipe navigating back); a heading click selects its section and a list item its nested hierarchy; Shift+click/drag appends pending ranges that one label commits together as one undo step.
+Changed in plan 26 ([26](plans/26-HIERARCHICAL-AND-MULTI-RANGE-SELECTION.md)): qualifying horizontal wheel input over pending text and its 200 ms continuation are canceled (fixes the left swipe navigating back); a heading click selects its section and a list item its nested hierarchy; Shift+click/drag appends pending ranges that one label commits together as one undo step. After verifier review the whisper became layout-neutral (overlay in uniform 32px block spacing; text never moves) and heading sections end at the last content before the next heading.
 
 Changed in plan 25 ([25](plans/25-ASSESSMENT-REMEDIATION.md)): Export kept as a user-facing action alongside Done; native horizontal-scroll labeling over the pending highlight replaced the pointer swipe; hi-fi navbar, contextual whisper and keycap help are in production; the controller was split; assessment defects were fixed.
 

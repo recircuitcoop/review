@@ -53,10 +53,16 @@ Browser-check page (`tests/browser-check.js`): wheel checks updated to the cance
 
 - macOS Chrome, Safari and Firefox with Magic Mouse and trackpad: a left swipe over a pending range labels it and the page does not navigate back; a right swipe does not navigate forward; the same swipe outside the selection still navigates.
 
-## Observations (not changed here)
+## Verifier correction (layout-neutral whisper, section end)
 
-- Canonical format v1 inserts no separator between a list item's own text and its nested list, so a parent item's quote reads `Parent itemChild item…`. Changing it needs a new canonical-format version and would invalidate saved reviews; out of scope.
-- When the whisper moves to a newly selected block below the previous target, the previous block's reserved room is released and the new block shifts up under the pointer (pre-existing plan 23 placement; Shift+click makes it more frequent). Users re-hover before swiping; the tests do the same.
+An independent verifier refuted the first head (`cd9ccba`):
+
+1. **Text moved under the pointer.** The whisper reserved room by growing its block's bottom margin. Clicking block B below block A moved that margin from A to B, so B shifted up about 40px in all three engines. The unmoved pointer then sat in a gap, and a swipe was neither labeled nor canceled. On real hardware, that brings back the back-navigation bug. Decision: the whisper is layout-neutral. It is an absolute overlay centred in the existing spacing below its block and never changes any block's margin or size. Spacing is uniform: `p`, headings, lists, list items, code and blockquotes all use `margin: 0 0 var(--review-paragraph-spacing)`. The `paragraphSpacing` default rises from 24px to 32px so one whisper line (24px) fits. A host that sets a smaller value lets a whisper overlap the next line; the overlay's paper background (`--review-panel`) keeps it legible, as it does for a narrow-width wrap. New invariant: selection, append, label, undo/redo and whisper changes never move document text.
+2. **Section end off by one.** The end was computed as "next heading start − 1", which assumed a separator always precedes the next heading. For `## A\n\n- item\n  ## B` that gave `A\nite`. The end is now the end of the last rendered content before the next heading element: a Range ending before that element, mapped through the canonical text's new `contentEnd(position)`, which skips block separators by segment kind instead of guessing. List items use the same helper.
+
+Tests: block geometry (relative to the surface, rounded to 0.01px against Firefox's sub-pixel float noise) is identical after a plain click, a plain click below, Shift+click below and above, a label and an undo. A click followed by a swipe with the pointer unmoved labels and cancels in both directions, including a Shift selection built top to bottom. The `## A … ## B` case selects `A\nitem`. The re-hover workarounds are removed. All three new tests fail against the `cd9ccba` whisper and scope code and pass now. The precise-mode Shift+ArrowDown and drag-across-whisper baselines still match.
+
+Remaining observation, not changed: canonical format v1 inserts no separator between a list item's own text and its nested list, so a parent item's quote reads `Parent itemChild item…`. Changing it needs a new canonical-format version.
 
 ## Done
 

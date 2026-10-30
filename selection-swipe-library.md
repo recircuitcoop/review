@@ -42,7 +42,7 @@ After establishing a selection, the user hovers any of its highlighted ranges an
 - Vertical, mixed-axis or zoom input, or input outside the pending highlight, leaves the selection pending.
 - One labeling scroll commits every pending range with that label, as one undoable step.
 
-The contextual whisper attached to the pending passage names both configured labels at their directions before assignment. The document layout remains stable. A multiline selection behaves as one item. Dragging that begins on highlighted text adjusts the native text selection; it never labels.
+The contextual whisper attached to the pending passage names both configured labels at their directions before assignment. It is an overlay in the uniform spacing below the passage and never moves document text, so a user can click and then swipe without moving the pointer. A multiline selection behaves as one item. Dragging that begins on highlighted text adjusts the native text selection; it never labels.
 
 After a successful assignment, the library commits one annotation per pending range, colors the passage according to its label, and clears the active selection. The user can immediately select another passage.
 
@@ -303,6 +303,7 @@ Done + pending selection -> Resolve pending selection first
 
 - One document version defines the meaning of every stored range.
 - Text identity is independent of screen geometry.
+- Selection, append, label, undo/redo and whisper changes never move document text, so the pointer stays on the passage it just selected.
 - A pending selection is not a labeled annotation.
 - Each committed annotation has exactly one of the two configured labels.
 - A classification gesture cannot also establish its own selection.
