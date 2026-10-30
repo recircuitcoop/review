@@ -30,13 +30,14 @@ export function blockScope(surface, text, block) {
     const next = [...surface.querySelectorAll('h1,h2,h3,h4,h5,h6')]
       .find(h => block.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING && Number(h.tagName[1]) <= level);
     if (!next) return { start, end: text.text.length };
-    contents.selectNodeContents(next);
-    // Exactly one block separator precedes the next heading; it is not part of the section.
-    return { start, end: text.fromRange(contents).start - 1 };
+    // The section ends with the last rendered content before the next heading element.
+    const section = document.createRange();
+    section.setStart(contents.startContainer, contents.startOffset);
+    section.setEndBefore(next);
+    return { start, end: text.contentEnd(text.fromRange(section).end) };
   }
-  // Nested blocks end with their own separator inside the item; drop it so the range ends on text.
-  if (block.querySelector(BLOCK_SELECTOR) && text.text[end - 1] === '\n') return { start, end: end - 1 };
-  return { start, end };
+  // Nested blocks close with their own separators inside the item; the range ends on content.
+  return { start, end: text.contentEnd(end) };
 }
 
 /** Render sanitized Markdown into the surface and return its keyboard-focusable blocks in document order. */
