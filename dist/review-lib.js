@@ -3503,6 +3503,7 @@ function mountReview(container, options) {
   }
   listen(more, "click", () => safe(() => setExpanded(!expanded)));
   listen(navbar, "click", (event) => {
+    event.target.closest("button")?.focus();
     const button = event.target.closest("[data-command]");
     if (button) safe(() => command(button.dataset.command));
   });

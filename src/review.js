@@ -531,6 +531,8 @@ export function mountReview(container, options) {
   }
   listen(more, 'click', () => safe(() => setExpanded(!expanded)));
   listen(navbar, 'click', event => {
+    // Safari does not focus a clicked button; without focus inside the widget, Escape and shortcuts never arrive.
+    event.target.closest('button')?.focus();
     const button = event.target.closest('[data-command]');
     if (button) safe(() => command(button.dataset.command));
   });
