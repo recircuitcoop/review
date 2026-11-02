@@ -23,7 +23,22 @@ Changed in plan 25 ([25](plans/25-ASSESSMENT-REMEDIATION.md)): Export kept as a 
 - Hand test (2026-11-02): the user tested the plan 26 build on macOS with a real mouse and reported all behaviours working, including left-swipe labeling without back navigation. Browsers and devices were not itemized.
 - Not verified: per-browser and trackpad coverage of back/forward history-swipe suppression beyond that hand test (Playwright can only prove `defaultPrevented`); first-use study (plan 17); native trackpad/mouse wheel delivery and momentum (18); mobile and physical devices (19/20); screen-reader announcements and OS-reserved shortcuts (13).
 - Closed: late wheel momentum no longer labels a newly made selection (continuation guard, plan 26).
+- Accessibility gates (2026-11-02, plans 16/21/22; branch `test/a11y-gates`; `npm test` 29/29, Playwright 141/141 across Chromium/Firefox/WebKit on port 4174): rendered light and dark colors of document, code, navbar, strip, label buttons, Done, whisper, status line, sidebar, help dialog, keycaps, all four highlights and the focus ring meet 4.5:1 / 3:1 in real engines, and the Node token test now also covers code text, navbar/dialog buttons, primary hover, focus ring, highlight underlines and the pressed saved-item border; real-key Escape priority (help → strip → clear) with focus return; keyboard-only labeling through the strip; focus return after the overlap chooser and the Done resolution dialog (chosen and canceled); keyboard theme toggle keeps its focus, pending selection, saved annotations and undo; a remapped Undo shows in the whisper, title, `aria-keyshortcuts` and help and works; the polite status line is the widget's only live region, hover/pointer movement and ••• open/close announce nothing, and label, undo and clear each announce once. These gates found that ••• re-announced the pending selection; it now repaints only the whisper.
 - Tooling: Codebase Memory indexed as project `review` on 2026-10-30 after two orphaned daemons from earlier sessions were stopped. Caveman, TOKF, Serena and MemPalace are usable.
+
+### Manual: screen reader
+
+Not yet run. The automated gates above prove DOM state, focus and live-region mutations, not what VoiceOver actually speaks. Run on macOS with VoiceOver (Cmd+F5) and Safari; record date, macOS, Safari and VoiceOver versions and pass/fail per step here. Expected wording comes from `src/review.js`, `src/dialogs.js` and `src/theme.js`; VoiceOver adds its own role and state words.
+
+1. Open `dist/review.html`, choose `tests/fixtures/review.md`, keep labels Accept / Reject, press Start review. Expected: VoiceOver does not read the annotator status line until something changes.
+2. Move VoiceOver to the theme button and press VO+Space twice. Expected: "Night theme, toggle button" with its state flipping each time (selected / not selected); focus stays on the button; the annotator says nothing.
+3. Tab to the document ("Read-only document"), press Option+Down twice, then Enter. Expected once: "Selected N characters: Keep this important sentence…". The whisper below the paragraph is never read as an announcement.
+4. Press Option+Left. Expected once: "Accept assigned. 1 saved annotations." Then Cmd+Z. Expected once: "Undone."
+5. Press Enter on the block again, then Escape. Expected: "Selected …", then once "Selection cleared."
+6. Select the block again, Tab to "Annotation actions, collapsed, button", press VO+Space. Expected: "expanded"; the selection is not re-announced. Press Escape. Expected: "collapsed"; focus stays on Annotation actions; the selection remains (Option+Left still labels it).
+7. Press F1. Expected: "Keyboard shortcuts, dialog" with focus on "Close, button"; rows read label then keys (for example "Undo, Cmd+Z"). Press Escape. Expected: focus returns to the control that opened it; nothing else is announced.
+8. With a pending selection press Cmd+Enter. Expected: "Resolve pending selection, dialog" with Accept, Reject, Discard pending selection and Cancel. Escape returns focus to the document block and keeps the selection; choosing Accept instead announces "Review complete. Annotations remain available for export or retry." and returns focus.
+9. With VoiceOver's mouse-pointer speech off, move the mouse across the document and navbar. Expected: no announcement from the status line.
 
 ## Remaining verification limits
 
