@@ -2,7 +2,7 @@
 
 A local Markdown review app and framework-independent browser library. Select a passage, assign either of two labels, and download one JSON file per label. Unselected text stays unlabeled.
 
-**Status:** split export delivery and filenames passed all nine CI jobs. Saved-review opening, night theme, and Cmd/Ctrl shortcut labels are implemented with local browser checks; their expanded cross-platform CI verification is pending. See the [current plan status](docs/plans/README.md).
+**Status:** first release `v0.1.0` (2026-11-02). The desktop library and app pass the nine-job Windows/Linux/macOS × Chromium/Firefox/WebKit CI matrix. Open: manual VoiceOver pass, per-browser/trackpad evidence and final desktop sign-off; mobile is not started. See the [current plan status](docs/plans/README.md).
 
 ## Use the app
 
