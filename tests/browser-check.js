@@ -280,7 +280,8 @@ await check('Every toolbar command and keyboard dispatcher path uses the shared 
     surface.focus(); key(surface, 'ArrowDown', { altKey: true }); equal(document.activeElement.tagName, 'H1');
     key(document.activeElement, 'ArrowDown', { altKey: true }); equal(document.activeElement.tagName, 'P');
     key(document.activeElement, 'ArrowUp', { altKey: true }); equal(document.activeElement.tagName, 'H1');
-    key(document.activeElement, 'Enter'); equal(selection.quote, 'Hi');
+    // Enter shares the click scope: the only h1 selects its section, the whole document.
+    key(document.activeElement, 'Enter'); equal(selection.quote, review.export().document.text);
     key(document.activeElement, 'ArrowLeft', { altKey: true }); equal(review.read().length, 1);
     click(container, 'nextBlock'); click(container, 'selectBlock'); click(container, 'right'); equal(review.read().length, 2);
     click(container, 'previousBlock'); equal(document.activeElement.tagName, 'H1');
@@ -383,18 +384,19 @@ function wheel(container, point, init) {
   return event;
 }
 
-await check('Pure horizontal wheel over pending text labels once per direction and never cancels scrolling', () => {
+await check('Pure horizontal wheel over pending text labels once per direction; it and its continuation are canceled', () => {
   for (const [direction, deltaX] of [['left', -30], ['right', 30]]) {
     const { container, review } = mount();
     try {
       review.select(3, 10);
       const point = rangePoint(container, 3, 10);
       const first = wheel(container, point, { deltaX, deltaY: 0 });
-      assert(!first.defaultPrevented, `${direction}: wheel was canceled`);
+      // Canceled so the browser's back/forward history swipe cannot also run.
+      assert(first.defaultPrevented, `${direction}: labeling wheel was not canceled`);
       equal(review.read().length, 1, `${direction}: wrong commit count`);
       equal(review.read()[0].labelId, direction); equal(review.read()[0].quote, 'One two');
-      // Later events of the same stream find no pending range; the saved annotation is not relabeled.
-      for (const repeat of [deltaX, deltaX, -deltaX]) assert(!wheel(container, point, { deltaX: repeat, deltaY: 0 }).defaultPrevented, 'Repeat was canceled');
+      // Later events of the same gesture are canceled too, but never commit or relabel.
+      for (const repeat of [deltaX, deltaX, -deltaX]) assert(wheel(container, point, { deltaX: repeat, deltaY: 0 }).defaultPrevented, 'Continuation was not canceled');
       equal(review.read().length, 1, `${direction}: repeated events committed again`);
       equal(review.read()[0].labelId, direction, `${direction}: repeated events relabeled`);
     } finally { review.destroy(); container.remove(); }
@@ -430,12 +432,17 @@ await check('Vertical, mixed-axis, zoom-chord, outside, no-pending, saved-only a
   }
 });
 
-await check('Known limitation: a late wheel event after a new selection labels that new range', () => {
-  // Portable APIs cannot tell old momentum from a new gesture; plan 18 records this as open native evidence.
+await check('A late wheel event of a labeling gesture never labels a newly made selection', async () => {
+  // Plan 26 continuation guard: events within the gap after a canceled one are canceled, never committed.
   const { container, review } = mount();
   try {
     review.select(3, 10); wheel(container, rangePoint(container, 3, 10), { deltaX: -30, deltaY: 0 });
-    review.select(11, 14); wheel(container, rangePoint(container, 11, 14), { deltaX: -30, deltaY: 0 });
+    review.select(11, 14);
+    assert(wheel(container, rangePoint(container, 11, 14), { deltaX: -30, deltaY: 0 }).defaultPrevented, 'Continuation was not canceled');
+    equal(review.read().map(a => a.quote), ['One two'], 'Continuation labeled the new selection');
+    // After the gap, a fresh gesture labels as usual.
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert(wheel(container, rangePoint(container, 11, 14), { deltaX: -30, deltaY: 0 }).defaultPrevented, 'Fresh labeling wheel was not canceled');
     equal(review.read().map(a => a.quote), ['One two', 'and']);
   } finally { review.destroy(); container.remove(); }
 });

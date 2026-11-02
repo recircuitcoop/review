@@ -19,7 +19,7 @@ export function createDialogs(root, idPrefix, isDestroyed) {
 
   function open(title, content, dismissLabel = 'Cancel') {
     // A second request while one is open is ignored rather than stacked.
-    if (current) return null;
+    if (current?.open) return null;
     const previousFocus = document.activeElement;
     const modal = element('dialog', 'review-dialog');
     const heading = element('h2', '', title);
@@ -32,9 +32,11 @@ export function createDialogs(root, idPrefix, isDestroyed) {
     modal.append(dismiss);
     root.append(modal);
     current = modal;
+    // The close event is queued after close(); a dialog opened in between keeps its state and focus.
     modal.addEventListener('close', () => {
-      current = null;
       modal.remove();
+      if (current !== modal) return;
+      current = null;
       if (!isDestroyed() && previousFocus?.isConnected) previousFocus.focus();
     }, { once: true });
     // Replace the browser's Escape handling so the return value is always `cancel`.
@@ -54,7 +56,8 @@ export function createDialogs(root, idPrefix, isDestroyed) {
       current?.close(value);
     },
     get isOpen() {
-      return current !== null;
+      // `open` drops synchronously on close(), so keys work again immediately.
+      return current?.open === true;
     },
   };
 }

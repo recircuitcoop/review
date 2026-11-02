@@ -14,7 +14,9 @@ export function validateOptions({ document, labels }) {
 /** One authority for committed annotations and their undo history. */
 export class ReviewSession {
   #annotations = [];
-  #pending = null;
+  // Pending ranges in document order: disjoint, never touching. `#recent` is the one added last.
+  #pending = [];
+  #recent = null;
   #activeId = null;
   #undo = [];
   #redo = [];
@@ -31,7 +33,10 @@ export class ReviewSession {
     this.#emit = (name, detail) => onEvent(name, copy(detail));
   }
 
-  get pending() { return copy(this.#pending); }
+  /** The most recently added pending range (what the whisper follows), or null. */
+  get pending() { return copy(this.#recent); }
+  /** Every pending range in document order; a label commits all of them. */
+  get pendingRanges() { return copy(this.#pending); }
   get activeId() { return this.#activeId; }
   get text() { return this.#document.text; }
   get labels() { return copy(this.#labels); }
@@ -44,22 +49,38 @@ export class ReviewSession {
     return { start, end, quote: text.slice(start, end), prefix: text.slice(Math.max(0, start - 32), start), suffix: text.slice(end, end + 32) };
   }
 
+  /** Replace the pending set with one range. */
   select(start, end) {
     const pending = this.anchor(start, end);
-    this.#pending = pending;
+    this.#pending = [pending];
+    this.#recent = pending;
     this.#activeId = null;
     this.#emit('selection', pending);
     return copy(pending);
   }
 
+  /** Add a range to the pending set (Shift); overlapping or touching ranges merge into one. */
+  add(start, end) {
+    let merged = this.anchor(start, end);
+    const joined = this.#pending.filter(p => p.start <= merged.end && merged.start <= p.end);
+    if (joined.length) {
+      merged = this.anchor(Math.min(merged.start, ...joined.map(p => p.start)), Math.max(merged.end, ...joined.map(p => p.end)));
+    }
+    this.#pending = [...this.#pending.filter(p => !joined.includes(p)), merged].sort(compare);
+    this.#recent = merged;
+    this.#activeId = null;
+    this.#emit('selection', merged);
+    return copy(merged);
+  }
+
   clear() {
-    this.#pending = null; this.#activeId = null;
+    this.#pending = []; this.#recent = null; this.#activeId = null;
     this.#emit('selection', null);
   }
 
   activate(id) {
     if (!this.#annotations.some(a => a.id === id)) throw new Error('Unknown annotation ID.');
-    this.#pending = null; this.#activeId = id;
+    this.#pending = []; this.#recent = null; this.#activeId = id;
     this.#emit('selection', { annotationId: id });
   }
 
@@ -83,12 +104,14 @@ export class ReviewSession {
 
   classify(labelId) {
     if (!this.#labels.some(l => l.id === labelId)) throw new Error('Unknown label ID.');
-    if (this.#pending) {
-      const annotation = freeze({ id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...this.#pending });
-      this.#pending = null; this.#activeId = null;
-      this.#commit([...this.#annotations, annotation]);
+    if (this.#pending.length) {
+      // One annotation per pending range, committed together so one undo removes them all.
+      const created = this.#pending.map(range => freeze({ id: crypto.randomUUID(), documentId: this.#document.id, documentVersion: this.#document.version, labelId, ...range }));
+      const recent = created[this.#pending.indexOf(this.#recent)];
+      this.#pending = []; this.#recent = null; this.#activeId = null;
+      this.#commit([...this.#annotations, ...created]);
       this.clear();
-      return copy(annotation);
+      return copy(recent);
     }
     if (this.#activeId) return this.relabel(this.#activeId, labelId);
     return null;

@@ -6,6 +6,8 @@ A project assessment found a spec/code conflict, unbuilt planned interaction (17
 
 ## Decisions
 
+The trigger rule's "never `preventDefault()`" and the repeat-safety limitation are superseded by [26](26-HIERARCHICAL-AND-MULTI-RANGE-SELECTION.md): qualifying events and their continuation are canceled.
+
 | Topic | Decision | Supersedes |
 | --- | --- | --- |
 | Export | The mounted widget keeps a visible **Export files** control (in the ••• action strip) and the `Mod+Shift+E` shortcut. Done still resolves pending text and runs completion. | 22/23 "no standalone Export control" |

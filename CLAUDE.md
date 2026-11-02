@@ -27,18 +27,20 @@ The host owns document identity/version, labels, persistence, downloads, and sav
 
 Recogito was not adopted because it could not be fetched/evaluated in the development environment. The implementation uses native Range/Selection, CSS Custom Highlight, and pointer events; `ReviewSession` is the single committed-state/history owner. Marked and DOMPurify own Markdown rendering and sanitization. Reevaluate an annotation dependency only when a concrete requirement justifies it.
 
-Do not add accounts, backend storage, collaboration, model suggestions, mutable-document reattachment, image-region annotation, discontinuous selections, or more than two labels.
+Do not add accounts, backend storage, collaboration, model suggestions, mutable-document reattachment, image-region annotation, discontinuous annotations, or more than two labels. Annotations remain contiguous; Shift may build several pending ranges that commit together.
 
 ## Invariants to preserve
 
-- Selection alone never commits an annotation. One pending range may exist; a separate gesture or classification command commits it.
-- A qualifying native horizontal scroll over pending text commits exactly once (trigger rule in plan 25). Pointer drags, vertical/mixed-axis scrolling and zoom input never commit and retain the pending selection. Never cancel wheel events.
+- Selection alone never commits an annotation. One pending selection exists: plain click/drag replaces it, Shift+click/drag appends contiguous ranges (overlapping or touching ranges merge). A separate gesture or classification command commits every pending range with one label, as one undo step. Annotations remain contiguous.
+- A heading click selects its section; a list item click selects its nested hierarchy; a drag keeps its exact range (plan 26).
+- A qualifying native horizontal scroll over pending text commits exactly once (trigger rule in plan 25). Pointer drags, vertical/mixed-axis scrolling and zoom input never commit and retain the pending selection. Cancel only qualifying horizontal scroll over pending text and its continuation; never cancel vertical, mixed or zoom input. A continuation never commits (plan 26).
 - Swipe, buttons, and keyboard commands share one commit path. Keep the complete initial-release shortcut map and contextual handling from the specification.
 - Annotation identity depends on immutable document version and canonical rendered text, never screen geometry. Use versioned canonical-text rules, UTF-16 code-unit offsets, and exclusive end positions.
 - Restore only against the matching document version and validate each range against its exact quote. Preserve stable annotation IDs and independent overlapping ranges.
 - Export only committed annotations, in document order within each label. Include metadata, canonical text, offset conventions, labels, and quote/context anchors. Empty label groups remain present; unselected text stays unlabeled.
 - Done resolves pending selections before completion. Save failure must leave the session available for retry.
 - Sanitize rendered HTML. Preserve document read-only behavior, focus, accessibility, native selection, editable-field and IME handling, and host shortcut boundaries.
+- Selection, append, label, undo/redo and whisper changes never move document text: the whisper is an overlay below its block and never changes a block's margin or size. A pending range's swipe hit area is recorded when the range is made: its text lines, plus for a click/Enter scope the covered blocks (list items reach left over their marker) and, for a section, the band between them; 1px tolerance. A click anywhere in a block, its bullet included, can be followed by a swipe in place. The wheel path reads only those pieces' live geometry, never offset mapping or a document walk.
 - Reflow, scrolling, resizing, and font loading cannot change text offsets. Changing the document or labels requires explicit reset or validated reload.
 
 ## First implementation checkpoint
