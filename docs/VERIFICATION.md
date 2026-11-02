@@ -2,12 +2,12 @@
 
 ## Current status
 
-Date: 2026-10-30. Branch: `feat/hierarchical-multi-selection`. Command: `CI=1 npm test` and `CI=1 npx playwright test` (the `npm run check` stages) run locally; exit code 0. A developer `npm start` held port 4173, so the Playwright stage ran through a scratch config that only moved the server to port 4174.
+Date: 2026-11-02. First release **`v0.1.0`** tagged on `main` at `71a52be` (PR #5 merge). Command: `npm test` and `npx playwright test` run locally; exit code 0. A developer `npm start` held port 4173, so the Playwright stage ran through a scratch config that only moved the server to a free port.
 
 | Check | Result |
 | --- | --- |
-| Node tests (`npm test`: model, server, files, theme, styles) | **28/28 passed** |
-| Playwright cases (`npm run test:browser`) | **120/120 passed**: 40 per engine across Chromium, Firefox and WebKit, including real-mouse heading/list hierarchy clicks, Shift+click/Shift+drag append, one-swipe batch labeling with a single undo, wheel cancellation (`defaultPrevented`) cases, block geometry unchanged by click/Shift+click/label/undo, click-then-swipe with the pointer unmoved, and swipes in place after clicks away from the text (right edge, short last line, code padding, gaps inside a section, bullet markers, a nested item's top boundary), and wheel handling under 16 ms per event on a 2000-block document. |
+| Node tests (`npm test`: model, server, files, theme, styles) | **29/29 passed** |
+| Playwright cases (`npm run test:browser`) | **144/144 passed**: 48 per engine across Chromium, Firefox and WebKit, including the accessibility gates below, real-mouse heading/list hierarchy clicks, Shift+click/Shift+drag append, one-swipe batch labeling with a single undo, wheel cancellation (`defaultPrevented`) cases, block geometry unchanged by click/Shift+click/label/undo, click-then-swipe with the pointer unmoved, and swipes in place after clicks away from the text (right edge, short last line, code padding, gaps inside a section, bullet markers, a nested item's top boundary), and wheel handling under 16 ms per event on a 2000-block document. |
 | Browser-check page (inside `host.spec.js`) | **41/41** in each engine, with the wheel checks updated to the cancellation contract |
 | Browser-check page (`npm run test:page`) | Builds `test-results/browser-check.html`; generation succeeded. It was not opened in a browser for this record. |
 | Host and style checks | Run inside the Playwright suite above (`host.spec.js`, `styles.spec.js`); the reporter prints case counts, not in-page check counts. |
@@ -20,6 +20,7 @@ Changed in plan 25 ([25](plans/25-ASSESSMENT-REMEDIATION.md)): Export kept as a 
 
 - CI matrix: [run 40967319567](https://github.com/recircuitcoop/review/actions/runs/40967319567) on `647162e` **passed all nine jobs** (Windows/Linux/macOS × Chromium/Firefox/WebKit). Independent verification found and then confirmed the fix for a whisper caret-navigation defect in precise mode.
 - CI matrix for plan 26: [run 41056037628](https://github.com/recircuitcoop/review/actions/runs/41056037628) on `97dfd85` **passed all nine jobs**; a fourth independent verification confirmed that head.
+- CI matrix for the accessibility gates and `v0.1.0`: [run 41429930031](https://github.com/recircuitcoop/review/actions/runs/41429930031) on `e7adf74` **passed all nine jobs**; two independent verifications preceded it.
 - Hand test (2026-11-02): the user tested the plan 26 build on macOS with a real mouse and reported all behaviours working, including left-swipe labeling without back navigation. Browsers and devices were not itemized.
 - Not verified: per-browser and trackpad coverage of back/forward history-swipe suppression beyond that hand test (Playwright can only prove `defaultPrevented`); native trackpad/mouse wheel delivery and momentum (18); mobile and physical devices (19/20); screen-reader announcements and OS-reserved shortcuts (13).
 - Closed: late wheel momentum no longer labels a newly made selection (continuation guard, plan 26).
