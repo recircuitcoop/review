@@ -829,6 +829,8 @@ test.describe('accessibility', () => {
     await expect(resolve).toBeHidden();
     await expect(paragraphs.nth(1)).toBeFocused();
     await expect(whisper(page)).toHaveAttribute('data-state', 'pending');
+    // The canceled run ends on the dialog's queued close event; Done before then joins that run.
+    await expect(page.locator('.review-dialog')).toHaveCount(0);
     const done = page.getByRole('button', { name: 'Done', exact: true });
     await done.focus();
     await page.keyboard.press('Enter');
