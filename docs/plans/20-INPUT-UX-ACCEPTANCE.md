@@ -20,7 +20,7 @@ Record actual device, OS/browser version, input settings, source/CI commit and o
 
 ## Task script and pass criteria
 
-1. Select a passage and assign each configured label using the proposed interaction. On desktop, hover and native horizontal scrolling.
+1. Select a passage and assign each configured label using the proposed interaction. On desktop, hover and native horizontal scrolling; no drag lesson. Label-button use is valid application use but not scrolling/swipe discoverability proof.
 2. Select and adjust an exact multiline range across formatting, repeated text, emoji, list/code blocks and overlaps. Verify the resulting quote and anchors after each action.
 3. Read/scroll normally, including while hovering/starting on a selection. Exercise mixed native axes, zoom, nested scrollable content and browser navigation. Native behavior remains intact; no unintended labeling is accepted. Do not “fix” failures by introducing the rejected diagonal recognizer.
 4. Test repeated events/momentum and selecting another range during an old scroll tail. Each deliberate successful action commits exactly once to the expected label; incidental input must not label another range. Record limitations rather than claiming a portable physical gesture-end signal.

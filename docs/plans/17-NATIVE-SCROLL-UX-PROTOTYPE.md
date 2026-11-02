@@ -1,6 +1,6 @@
 # 17 — Native scrolling UX
 
-Status: probe fixture available (`npm start`, then `/tests/wheel-probe.html`) under [25](25-ASSESSMENT-REMEDIATION.md); native-device evidence **open**. User decision 2026-11-02: no first-use study; the user's manual check is enough. Date: 2026-10-20. On 2026-10-29 the user directed 18 to proceed ahead of this gate; the gate still governs any native-acceptance claim.
+Status: probe fixture available (`npm start`, then `/tests/wheel-probe.html`) under [25](25-ASSESSMENT-REMEDIATION.md); native-device evidence **open**. User decision 2026-11-02: no first-use study; the user's manual check is enough. Date: 2026-10-20. On 2026-10-29 the user directed 18 to proceed ahead of this gate; the gate still governs any discoverability or native-acceptance claim.
 
 ## Outcome
 
