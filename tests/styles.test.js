@@ -66,6 +66,33 @@ test('default widget text on navbar, whisper, keycap, label and highlight surfac
   }
 });
 
+test('code text, navbar and dialog buttons, primary hover, focus ring and highlight underlines meet AA in light and night', () => {
+  // Text needs 4.5:1. The focus outline sits 3px outside its control, so it is measured against
+  // the surfaces it is drawn on; underlines and the pressed saved-item border are non-text (3:1).
+  const text = [
+    ['textColor', 'codeBackground'], ['mutedColor', 'codeBackground'],
+    ['buttonTextColor', 'toolbarBackground'], ['buttonTextColor', 'background'], ['buttonTextColor', 'surfaceBackground'],
+    ['primaryTextColor', 'primaryHoverBackground'], ['leftTextColor', 'toolbarBackground'], ['rightTextColor', 'toolbarBackground'],
+  ];
+  const nonText = [
+    ['focusColor', 'background'], ['focusColor', 'surfaceBackground'], ['focusColor', 'toolbarBackground'], ['focusColor', 'codeBackground'],
+    ['highlightLeftBorderColor', 'highlightLeftBackground'], ['highlightRightBorderColor', 'highlightRightBackground'],
+    ['highlightPendingTextColor', 'highlightPendingBackground'], ['highlightActiveTextColor', 'highlightActiveBackground'],
+    ['activeBorderColor', 'activeBackground'], ['activeBorderColor', 'surfaceBackground'],
+  ];
+  for (const [index, theme] of [[0, 'light'], [1, 'night']]) {
+    const colors = palette(index);
+    for (const [pairs, minimum] of [[text, 4.5], [nonText, 3]]) {
+      for (const [fg, bg] of pairs) {
+        assert.ok(colors[fg] && colors[bg], `Missing ${theme} ${fg}/${bg}`);
+        const a = luminance(colors[fg]), b = luminance(colors[bg]);
+        const ratio = (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+        assert.ok(ratio >= minimum, `${theme} ${fg}/${bg}: ${ratio.toFixed(2)} < ${minimum}`);
+      }
+    }
+  }
+});
+
 test('every public style token has a consumer in the widget styles or highlights', async () => {
   const { readFileSync } = await import('node:fs');
   const css = readFileSync(new URL('../src/review.css', import.meta.url), 'utf8') + readFileSync(new URL('../src/render.js', import.meta.url), 'utf8');
