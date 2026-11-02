@@ -35,5 +35,5 @@ Regression cases: native left/right; repeated events; no pending/saved-only/outs
 ## Done
 
 - [x] Relevant failures demonstrated before the scoped change; sequence/DOM tests pass.
-- [ ] Native desktop acceptance and unchanged annotation/export invariants recorded.
-- [ ] Help/usage/verification updated; rebuilt app/library; 13 remains open where proof is missing. (Status copy, README, IMPLEMENTATION and rebuilt `dist/` done; `docs/VERIFICATION.md` is plan 25 slice 5; the whisper/help surface is slice 4.)
+- [ ] Native desktop acceptance and unchanged annotation/export invariants recorded. (Partial: the user's 2026-11-02 macOS real-mouse hand test passed, see [26](26-HIERARCHICAL-AND-MULTI-RANGE-SELECTION.md); per-browser and trackpad evidence still open.)
+- [x] Help/usage/verification updated; rebuilt app/library; 13 remains open where proof is missing. (Status copy, README, IMPLEMENTATION, help, whisper and rebuilt `dist/` done in plans 25/26; `docs/VERIFICATION.md` updated.)

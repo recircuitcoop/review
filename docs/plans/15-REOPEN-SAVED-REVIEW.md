@@ -1,6 +1,6 @@
 # 15 — Reopen a saved review
 
-Status: implemented and locally verified; expanded cross-platform and updated-download acceptance is pending. Depends on: 09, 14. Reuses existing validated restore and editing commands.
+Status: complete; cross-platform reopen/edit/download acceptance passes in the nine-job CI matrix. Depends on: 09, 14. Reuses existing validated restore and editing commands.
 Seed: [reopen a saved review](../../selection-swipe-library.md#reopen-a-saved-review). Contract: [saved-review opening](../IMPLEMENTATION.md#reopen-a-saved-review).
 
 ## Outcome
@@ -26,7 +26,7 @@ Restored annotations retain IDs, labels, quotes, positions, and overlaps and bec
 ## Done
 
 - [x] Focused host-flow tests fail before implementation and pass using the existing restore model.
-- [ ] Reopen → edit → export → reopen works with grouped and split input; rebuilt offline app and usage docs match.
+- [x] Reopen → edit → export → reopen works with grouped and split input; rebuilt offline app and usage docs match. (`tests/host.spec.js` "fresh saved grouped/split review…" passes in all nine jobs of [run 41056037628](https://github.com/recircuitcoop/review/actions/runs/41056037628) and on `main`.)
 - [x] Verification records actual results and outstanding platform gaps.
 
 Implementation detail: a separate “Open saved review” form is available before any review starts. Candidate parsing, SHA-256 source matching, mount and restore run before the replacement confirmation. Confirmation cancellation destroys only the detached candidate. Loading controls preserve the current pending range; both load buttons are disabled during reads to prevent out-of-order replacement. Labels are populated from saved metadata after a successful swap.
