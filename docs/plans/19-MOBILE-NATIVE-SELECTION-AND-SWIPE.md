@@ -26,6 +26,6 @@ Real iPhone Safari and Android Chrome: tap block/list/code; long-press exact tex
 
 ## Done
 
-- [ ] Mobile UX/capability prototype passes native selection, scrolling and first-use checks.
+- [ ] Mobile UX/capability prototype passes native selection and scrolling checks.
 - [ ] Focused regression tests and integration pass without changing canonical text or public data contracts.
 - [ ] Physical-device results and supported versions recorded in 20; no mobile-support claim before that gate.

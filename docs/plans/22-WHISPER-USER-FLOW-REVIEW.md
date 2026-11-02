@@ -76,11 +76,10 @@ Visual review source: `docs/design/widget-whisper-flow.html`. It shows two compl
 
 The narrow stress case deliberately allows endpoint names to wrap while shortening centre advice to `Unlabeled`; it exposes the proposed exception to the single-line requirement for discussion, not as an approved responsive rule. No new tooltip or help icon is introduced. Prototype assertions cover commit/Undo/Redo target clearing; this is preview proof, not production acceptance.
 
-- [ ] Review one coherent storyboard: read → select → label → confirm → undo → continue, including an existing saved annotation.
+- [x] Review one coherent storyboard: read → select → label → confirm → undo → continue, including an existing saved annotation. (Reviewed in the production app instead of the storyboard: the user walked this flow on 2026-11-02 and reported it successful.)
 - [x] Show a multiline range and two long labels in a narrow container for discussion.
 - [x] Correct the new storyboard's commit/Undo/Redo target transitions and distinguish saved editing.
-- [ ] First-use task with no coaching: select a sentence, assign both labels, correct a mistake and continue. Observe where scrolling is attempted, whether horizontal input is understood, and whether passive names look clickable.
-- [ ] Verify keyboard mode, focus preservation, remapped hints, Escape priority and restrained screen-reader announcements.
-- [ ] Record native-input evidence separately; only then finalize truthful device-specific guidance and proceed to implementation/high fidelity gates.
+- [ ] Verify keyboard mode, focus preservation, remapped hints, Escape priority and restrained screen-reader announcements. (Partial: keyboard state, focus return, remapped hints, Escape order, single polite announcements and AA contrast in both themes are now automated in Chromium/Firefox/WebKit; offline app rebuilt. The VoiceOver listening pass in [VERIFICATION — Manual: screen reader](../VERIFICATION.md) is open.)
+- [x] Record native-input evidence separately; only then finalize truthful device-specific guidance and proceed to implementation/high fidelity gates. (Native evidence is recorded in [18](18-DESKTOP-HOVER-SCROLL-LABELING.md) and [VERIFICATION](../VERIFICATION.md): the user's 2026-11-02 macOS real-mouse test confirmed left and right labelling with no back navigation. The guidance stays as implemented for desktop mouse input: `Unlabeled · scroll ← → over selection`, with the label buttons and keyboard as alternatives. Trackpad and per-browser checks remain open in 18 and may still change it; mobile guidance waits for 19.)
 
 No new hardware tests, user research or production application changes were performed by this review.

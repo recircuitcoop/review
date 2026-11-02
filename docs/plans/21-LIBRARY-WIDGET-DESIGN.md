@@ -115,13 +115,13 @@ Clicking the sample passage simulates a pending selection. The actions menu and 
 - [x] Refine solid selection underline and one-line whisper with actual label values at opposite ends.
 - [x] Specify reading, pending, committed, selected-saved, overlap chooser and empty states for the chosen direction. ([IMPLEMENTATION — Widget presentation](../IMPLEMENTATION.md#widget-presentation) and State, gestures, and editing.)
 - [x] Specify the complete actions menu, relabel/delete/history, Escape priorities, focus return and long-label behavior. (Same sections; production-implemented with regression tests via [23](23-WIDGET-HIGH-FIDELITY.md).)
-- [ ] Specify Done with a pending range, save-in-progress, success and retryable failure. Never imply a save before host confirmation.
+- [x] Specify Done with a pending range, save-in-progress, success and retryable failure. Never imply a save before host confirmation. ([IMPLEMENTATION — Widget presentation, Done](../IMPLEMENTATION.md#widget-presentation): records the implemented plan 12 flow; no visual busy state is added.)
 - [x] Produce high-fidelity desktop/narrow and light/night designs of that direction; review together. (Done and user-approved in [23](23-WIDGET-HIGH-FIDELITY.md).)
-- [ ] Verify native selection, layout, focus, accessibility and first-use tasks before implementation acceptance.
+- [ ] Verify native selection, layout, focus and accessibility before implementation acceptance.
 
 ## Acceptance for the chosen design
 
-A first-time user can identify the selected quote, find the label directions and effective keyboard mappings, assign a label, identify the committed result and reverse an error. An ordinary mouse user can discover the actions menu and label without horizontal scrolling. Experienced users can classify without opening a menu. Reading has no permanent classification toolbar or unsolicited inspector. No focus theft or live announcements on each hover.
+A user can identify the selected quote, find the label directions and effective keyboard mappings, assign a label, identify the committed result and reverse an error. An ordinary mouse user can discover the actions menu and label without horizontal scrolling. Experienced users can classify without opening a menu. Reading has no permanent classification toolbar or unsolicited inspector. No focus theft or live announcements on each hover.
 
 Pending and committed text differ by more than color. Clicking a saved highlight exposes its identity and editing; overlapping annotations remain independently reachable. Every capability remains keyboard accessible. At 320px and desktop widths, names wrap, touch targets fit, and text/native handles remain unobstructed. A reopened review distinguishes existing annotations from a new pending range. Restore stays a host/API action.
 

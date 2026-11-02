@@ -526,10 +526,13 @@ export function mountReview(container, options) {
     actions.hidden = !value;
     title.hidden = value;
     more.setAttribute('aria-expanded', String(value));
-    paint();
+    // Only the whisper hint depends on the strip; a full paint would re-announce the selection.
+    paintWhisperNow();
   }
   listen(more, 'click', () => safe(() => setExpanded(!expanded)));
   listen(navbar, 'click', event => {
+    // Safari does not focus a clicked button; without focus inside the widget, Escape and shortcuts never arrive.
+    event.target.closest('button')?.focus();
     const button = event.target.closest('[data-command]');
     if (button) safe(() => command(button.dataset.command));
   });

@@ -1,6 +1,6 @@
-# 17 — Native scrolling and first-use UX
+# 17 — Native scrolling UX
 
-Status: probe fixture available (`npm start`, then `/tests/wheel-probe.html`) under [25](25-ASSESSMENT-REMEDIATION.md); first-use study and native-device evidence **open**. Date: 2026-10-20. On 2026-10-29 the user directed 18 to proceed ahead of this gate; the gate still governs any discoverability or native-acceptance claim.
+Status: probe fixture available (`npm start`, then `/tests/wheel-probe.html`) under [25](25-ASSESSMENT-REMEDIATION.md); native-device evidence **open**. User decision 2026-11-02: no first-use study; the user's manual check is enough. Date: 2026-10-20. On 2026-10-29 the user directed 18 to proceed ahead of this gate; the gate still governs any discoverability or native-acceptance claim.
 
 ## Outcome
 
@@ -36,7 +36,6 @@ Proposed instruction: **“Hover over selected text and scroll left or right to 
 
 ## Acceptance and gate
 
-- An unfamiliar reviewer, given the interface and a labeling task, finds and completes both directions with a trackpad without verbal coaching or shortcut-help lookup. Record first attempt, assistance, errors, correct quote/label, single assignment and discoverable Undo. Button success does not count as proof that scrolling was discoverable.
 - Record actual native behavior for pure vertical input, horizontal input, both axes, momentum, pinch/zoom, nested scrollable code and browser navigation. No application-generated scroll or navigation suppression.
 - A horizontal-capable mouse is tested separately; a vertical-only mouse remains fully usable through buttons/keyboard.
 - Before 18, write the observed direction/trigger and minimum duplicate-safety decision. Prefer the existing single pending range clearing after one commit. Add any tail/rearm guard only for an observed failing sequence.
@@ -44,6 +43,6 @@ Proposed instruction: **“Hover over selected text and scroll left or right to 
 
 ## Done
 
-- [ ] Native-input fixture results and first-use findings recorded with devices/browser versions.
-- [ ] Exact trigger/copy and observed failure regressions agreed in this plan before implementation.
-- [ ] Plan 18 begins only after this gate passes; current prototype is not relabeled as production-ready.
+- [ ] Native-input fixture results recorded with devices/browser versions.
+- [x] Exact trigger/copy and observed failure regressions agreed in this plan before implementation. (Superseded by user decision: the trigger rule is fixed in [25](25-ASSESSMENT-REMEDIATION.md) slice 3 and amended in [26](26-HIERARCHICAL-AND-MULTI-RANGE-SELECTION.md). The copy `Unlabeled · scroll ← → over selection` is in [IMPLEMENTATION — Widget presentation](../IMPLEMENTATION.md#widget-presentation). The observed regressions are the browser left-swipe back navigation and the late momentum labelling, both closed in 26.)
+- [x] Plan 18 begins only after this gate passes; current prototype is not relabeled as production-ready. (Superseded: on 2026-10-29 the user directed 18 to proceed ahead of this gate, and the user hand-tested the result on macOS with a real mouse on 2026-11-02. Per-browser and trackpad evidence stays open under the first item and 18.)

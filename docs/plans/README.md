@@ -8,7 +8,7 @@ Latest recorded local proof (2026-10-30, plan 26): **28 Node tests** and **120 P
 
 ## Newly requested interaction work
 
-The user reports that desktop swiping is not understandable. Following a joint UX-expert/senior-frontend review, plans **17–20** were documented; native horizontal-scroll labeling has since been implemented under [25](25-ASSESSMENT-REMEDIATION.md), replacing the pointer swipe, while the study, hardware and mobile gates remain unverified. The preferred desktop prototype is **select → hover the highlight → native horizontal scroll → label**. The user rejected dragged-text/handle instructions and custom diagonal recognition. Preserve OS/browser scrolling, zoom and navigation; do not transfer the pointer prototype's thresholds to wheel input. Mobile selection/swiping has a separate native-device gate.
+The user reports that desktop swiping is not understandable. Following a joint UX-expert/senior-frontend review, plans **17–20** were documented; native horizontal-scroll labeling has since been implemented under [25](25-ASSESSMENT-REMEDIATION.md), replacing the pointer swipe, while the hardware and mobile gates remain unverified (no first-use study, user decision 2026-11-02). The preferred desktop prototype is **select → hover the highlight → native horizontal scroll → label**. The user rejected dragged-text/handle instructions and custom diagonal recognition. Preserve OS/browser scrolling, zoom and navigation; do not transfer the pointer prototype's thresholds to wheel input. Mobile selection/swiping has a separate native-device gate.
 
 Proceed **17 → 18 → 19 → 20**, with no implementation past a failed prerequisite. Existing 07 checks prove the earlier prototype within their recorded limits, not acceptance of this new UX. Existing 13 remains open; its desktop interaction claims must include the relevant new desktop evidence. See the [user decisions and joint review](17-NATIVE-SCROLL-UX-PROTOTYPE.md).
 
@@ -40,10 +40,10 @@ Keep accessibility in every interaction slice. Use real browser tests for select
 | [14 — Split export delivery](14-SPLIT-EXPORT-DELIVERY.md) | Both label files download with `<file>_<label>.json` names. | 08, 12; before 13 |
 | [15 — Reopen saved review](15-REOPEN-SAVED-REVIEW.md) | Load saved annotations, edit, and export the complete revised review. | 09, 14; before 13 |
 | [16 — Night theme](16-NIGHT-THEME.md) | Light/night switching preserves readability and annotation state. | 02, 05; before 13 |
-| [17 — Native-scroll UX prototype](17-NATIVE-SCROLL-UX-PROTOTYPE.md) | Validate hover + native horizontal scrolling and first-use understanding. | Current implementation; before 18 |
+| [17 — Native-scroll UX prototype](17-NATIVE-SCROLL-UX-PROTOTYPE.md) | Validate hover + native horizontal scrolling on real input. | Current implementation; before 18 |
 | [18 — Desktop hover/scroll labeling](18-DESKTOP-HOVER-SCROLL-LABELING.md) | Map native horizontal input over pending text to one correct label. | 17; feeds 13/20 |
 | [19 — Mobile selection and swipe](19-MOBILE-NATIVE-SELECTION-AND-SWIPE.md) | Preserve native text selection/scroll/zoom while enabling deliberate labeling. | 17, shared safety from 18 |
-| [20 — Input UX acceptance](20-INPUT-UX-ACCEPTANCE.md) | Prove desktop discoverability and actual desktop/mobile hardware behavior. | 18, 19; desktop evidence feeds 13 |
+| [20 — Input UX acceptance](20-INPUT-UX-ACCEPTANCE.md) | Prove actual desktop/mobile hardware behavior. | 18, 19; desktop evidence feeds 13 |
 | [21 — Library widget design](21-LIBRARY-WIDGET-DESIGN.md) | Choose one of five lo-fi directions, then agree high-fidelity design and detailed interactions. | 17 decisions; before production UI in 18/19 |
 | [22 — Whisper user-flow review](22-WHISPER-USER-FLOW-REVIEW.md) | Agree state-led guidance, correction flow and narrow/multiline priorities after UX/design/frontend review. | 21 selected direction; native instruction depends on 17 |
 | [23 — Widget high fidelity](23-WIDGET-HIGH-FIDELITY.md) | Refine the approved composition, palettes, typography and control states for user review. | 21/22 accepted lo-fi; before production UI |

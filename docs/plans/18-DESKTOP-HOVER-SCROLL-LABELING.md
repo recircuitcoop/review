@@ -1,6 +1,6 @@
 # 18 — Desktop hover and horizontal scroll
 
-Status: implemented under [25](25-ASSESSMENT-REMEDIATION.md) slice 3 (user-directed, ahead of 17's study), with the trigger rule recorded there; native desktop acceptance open. Depends on: 17. Reopens desktop gesture UX from 07; verification feeds 13 and 20.
+Status: implemented under [25](25-ASSESSMENT-REMEDIATION.md) slice 3 (user-directed, ahead of 17's gate), with the trigger rule recorded there; native desktop acceptance open. Depends on: 17. Reopens desktop gesture UX from 07; verification feeds 13 and 20.
 
 ## Outcome
 
