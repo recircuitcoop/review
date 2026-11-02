@@ -648,6 +648,8 @@ test.describe('accessibility', () => {
 
   for (const theme of ['light', 'dark']) {
     test(`rendered ${theme} colors meet AA for text, controls, whisper, keycaps, highlights and focus`, async ({ page }) => {
+      // Buttons transition their colors; reduced motion removes the transition so the final colors are read.
+      await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
       await page.locator('.review-document p').first().click();
       await page.keyboard.press('F1');
@@ -706,6 +708,17 @@ test.describe('accessibility', () => {
       expect(result.failures).toEqual([]);
     });
   }
+
+  test('a mouse-opened ••• strip collapses on Escape and keeps shortcuts working (Safari does not focus clicked buttons)', async ({ page }) => {
+    await page.locator('.review-document p').first().click();
+    const more = page.locator('.review-more');
+    await more.click();
+    await expect(more).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('Escape');
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(await page.evaluate(() => review.read().length)).toBe(0);
+    await expect(whisper(page)).toBeVisible();
+  });
 
   test('the status line is the only live region; hover and ••• stay silent; label, undo and clear announce once each', async ({ page }) => {
     const regions = await page.evaluate(() => [...document.querySelectorAll('.review [aria-live], .review [role="status"], .review [role="alert"], .review [role="log"]')]
