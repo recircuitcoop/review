@@ -45,5 +45,5 @@ Proposed instruction: **“Hover over selected text and scroll left or right to 
 ## Done
 
 - [ ] Native-input fixture results and first-use findings recorded with devices/browser versions.
-- [ ] Exact trigger/copy and observed failure regressions agreed in this plan before implementation.
-- [ ] Plan 18 begins only after this gate passes; current prototype is not relabeled as production-ready.
+- [x] Exact trigger/copy and observed failure regressions agreed in this plan before implementation. (Superseded by user decision: the trigger rule is fixed in [25](25-ASSESSMENT-REMEDIATION.md) slice 3 and amended in [26](26-HIERARCHICAL-AND-MULTI-RANGE-SELECTION.md). The copy `Unlabeled · scroll ← → over selection` is in [IMPLEMENTATION — Widget presentation](../IMPLEMENTATION.md#widget-presentation). The observed regressions are the browser left-swipe back navigation and the late momentum labelling, both closed in 26.)
+- [x] Plan 18 begins only after this gate passes; current prototype is not relabeled as production-ready. (Superseded: on 2026-10-29 the user directed 18 to proceed ahead of this gate, and the user hand-tested the result on macOS with a real mouse on 2026-11-02. Per-browser and trackpad evidence stays open under the first item and 18.)
