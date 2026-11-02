@@ -640,3 +640,209 @@ test('a click in a code block\'s left padding, then a swipe in place, labels and
   await expect.poll(() => page.evaluate(() => review.read().map(a => a.quote))).toEqual(['const value = 42;\n']);
   expect(await page.evaluate(() => wheels)).toEqual([true]);
 });
+
+// --- Accessibility gates (plans 16, 21, 22): real keys, focus return, announcements, rendered contrast ---
+
+test.describe('accessibility', () => {
+  const whisper = page => page.locator('.review-whisper');
+
+  for (const theme of ['light', 'dark']) {
+    test(`rendered ${theme} colors meet AA for text, controls, whisper, keycaps, highlights and focus`, async ({ page }) => {
+      await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+      await page.locator('.review-document p').first().click();
+      await page.keyboard.press('F1');
+      await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+      const result = await page.evaluate(() => {
+        // Computed colors are rgb() or color(srgb ...); both reduce to three 0-255 channels.
+        const channels = value => {
+          const numbers = value.match(/[\d.]+/g).map(Number).slice(0, 3);
+          return value.startsWith('color(') ? numbers.map(n => n * 255) : numbers;
+        };
+        const luminance = value => {
+          const [r, g, b] = channels(value).map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
+          return r * .2126 + g * .7152 + b * .0722;
+        };
+        const ratio = (fg, bg) => { const a = luminance(fg), b = luminance(bg); return (Math.max(a, b) + .05) / (Math.min(a, b) + .05); };
+        const css = (selector, property) => getComputedStyle(document.querySelector(selector))[property];
+        const root = document.querySelector('.review');
+        // Highlight and focus tokens have no plain element; a probe inside the widget resolves them.
+        const probe = (fg, bg) => {
+          const span = document.createElement('span');
+          span.style.color = `var(${fg})`;
+          span.style.backgroundColor = `var(${bg})`;
+          root.append(span);
+          const style = getComputedStyle(span), colors = [style.color, style.backgroundColor];
+          span.remove();
+          return colors;
+        };
+        const panel = css('.review', 'backgroundColor'), navbar = css('.review-navbar', 'backgroundColor');
+        const pairs = [
+          ['document text', css('.review-document p', 'color'), panel, 4.5],
+          ['code text', css('.review-document pre code', 'color'), css('.review-document pre', 'backgroundColor'), 4.5],
+          ['navbar title', css('.review-title', 'color'), navbar, 4.5],
+          ['strip command', css('.review-actions [data-command="undo"]', 'color'), navbar, 4.5],
+          ['help icon', css('.review-navbar [data-command="help"]', 'color'), navbar, 4.5],
+          ['left label button', css('[data-command="left"]', 'color'), css('[data-command="left"]', 'backgroundColor'), 4.5],
+          ['right label button', css('[data-command="right"]', 'color'), css('[data-command="right"]', 'backgroundColor'), 4.5],
+          ['Done', css('.review-finish', 'color'), css('.review-finish', 'backgroundColor'), 4.5],
+          ['whisper state', css('.review-whisper-status', 'color'), css('.review-whisper', 'backgroundColor'), 4.5],
+          ['whisper label', css('.review-whisper-end[data-end="left"]', 'color'), css('.review-whisper', 'backgroundColor'), 4.5],
+          ['status line', css('.review-status', 'color'), css('.review-status', 'backgroundColor'), 4.5],
+          ['sidebar heading', css('.review-saved h2', 'color'), css('.review-saved', 'backgroundColor'), 4.5],
+          ['help dialog', css('.review-dialog', 'color'), css('.review-dialog', 'backgroundColor'), 4.5],
+          ['keycap', css('.review-dialog kbd', 'color'), css('.review-dialog kbd', 'backgroundColor'), 4.5],
+          ...['left', 'right', 'pending', 'active'].map(kind => [`${kind} highlight`, ...probe(`--review-mark-${kind}-text`, `--review-mark-${kind}-bg`), 4.5]),
+          ['focus ring on document', probe('--review-focus', '--review-panel')[0], panel, 3],
+          ['focus ring on navbar', probe('--review-focus', '--review-toolbar-bg')[0], navbar, 3],
+        ];
+        return {
+          panelLuminance: luminance(panel),
+          failures: pairs.map(([name, fg, bg, minimum]) => [name, fg, bg, ratio(fg, bg), minimum]).filter(([, , , value, minimum]) => !(value >= minimum)),
+        };
+      });
+      // The widget really resolved this theme's half of each light-dark() default.
+      if (theme === 'light') expect(result.panelLuminance).toBeGreaterThan(.8);
+      else expect(result.panelLuminance).toBeLessThan(.05);
+      expect(result.failures).toEqual([]);
+    });
+  }
+
+  test('the status line is the only live region; hover and ••• stay silent; label, undo and clear announce once each', async ({ page }) => {
+    const regions = await page.evaluate(() => [...document.querySelectorAll('.review [aria-live], .review [role="status"], .review [role="alert"], .review [role="log"]')]
+      .map(node => [node.className, node.getAttribute('aria-live')]));
+    expect(regions).toEqual([['review-status', 'polite']]);
+    // One observer callback per task: what a polite live region hands to the screen reader per action.
+    await page.evaluate(() => {
+      const status = document.querySelector('.review-status');
+      window.announcements = [];
+      new MutationObserver(() => announcements.push(status.textContent)).observe(status, { childList: true, characterData: true, subtree: true });
+    });
+    const taken = () => page.evaluate(() => announcements.splice(0));
+    const paragraph = page.locator('.review-document p').first();
+    await paragraph.click();
+    expect(await taken()).toEqual([expect.stringMatching(/^Selected \d+ characters/)]);
+    const box = await paragraph.boundingBox();
+    await page.mouse.move(box.x + 5, box.y + 5);
+    await page.mouse.move(box.x + box.width - 5, box.y + box.height + 60, { steps: 12 });
+    await page.locator('.review-document pre').hover();
+    await page.getByRole('button', { name: 'Done', exact: true }).hover();
+    expect(await taken(), 'hover and pointer movement').toEqual([]);
+    await page.getByRole('button', { name: 'Annotation actions' }).click();
+    await page.getByRole('button', { name: 'Annotation actions' }).click();
+    expect(await taken(), '••• open and close').toEqual([]);
+    await paragraph.focus();
+    await page.keyboard.press('Alt+ArrowLeft');
+    expect(await taken()).toEqual(['Accept assigned. 1 saved annotations.']);
+    await page.keyboard.press('ControlOrMeta+z');
+    expect(await taken()).toEqual(['Undone.']);
+    await paragraph.click();
+    await taken();
+    await page.keyboard.press('Escape');
+    expect(await taken()).toEqual(['Selection cleared.']);
+  });
+
+  test('real keys: Escape closes help, then the strip, then clears; focus returns each time; strip commands work by keyboard', async ({ page }) => {
+    const more = page.getByRole('button', { name: 'Annotation actions' });
+    const paragraph = page.locator('.review-document p').first();
+    await paragraph.focus();
+    await page.keyboard.press('Enter');
+    await expect(whisper(page)).toHaveAttribute('data-state', 'pending');
+    await more.focus();
+    await page.keyboard.press('Enter');
+    await expect(more).toHaveAttribute('aria-expanded', 'true');
+    await expect(more).toBeFocused();
+    await page.keyboard.press('F1');
+    const help = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(help).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(help).toBeHidden();
+    await expect(more).toBeFocused();
+    await expect(more).toHaveAttribute('aria-expanded', 'true');
+    await expect(whisper(page)).toHaveAttribute('data-state', 'pending');
+    await page.getByRole('button', { name: 'Reject', exact: true }).focus();
+    await page.keyboard.press('Escape');
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await expect(more).toBeFocused();
+    await expect(whisper(page)).toHaveAttribute('data-state', 'pending');
+    await page.keyboard.press('Escape');
+    await expect(whisper(page)).toBeHidden();
+    // Keyboard-only labeling through the strip.
+    await paragraph.focus();
+    await page.keyboard.press('Enter');
+    await more.focus();
+    await page.keyboard.press('Space');
+    const accept = page.getByRole('button', { name: 'Accept', exact: true });
+    await accept.focus();
+    await page.keyboard.press('Space');
+    expect(await page.evaluate(() => review.read().map(a => a.labelId))).toEqual(['accept']);
+    await expect(accept).toBeFocused();
+  });
+
+  test('focus returns after the overlap chooser and the Done resolution dialog, chosen or canceled', async ({ page }) => {
+    const paragraphs = page.locator('.review-document p');
+    // Two overlapping annotations at the start of the first paragraph; the point lies in both.
+    const point = await page.evaluate(() => {
+      const p = document.querySelector('.review-document p');
+      const start = review.export().document.text.indexOf(p.firstChild.textContent);
+      review.select(start, start + 8);
+      document.querySelector('[data-command="left"]').click();
+      review.select(start + 2, start + 6);
+      document.querySelector('[data-command="right"]').click();
+      const range = document.createRange();
+      range.setStart(p.firstChild, 3);
+      range.setEnd(p.firstChild, 4);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    const chooser = page.getByRole('dialog', { name: 'Choose an annotation' });
+    await page.mouse.click(point.x, point.y);
+    await expect(chooser).toBeVisible();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(chooser).toBeHidden();
+    await expect(paragraphs.first()).toBeFocused();
+    await expect(whisper(page)).toHaveAttribute('data-state', 'active');
+    await page.mouse.click(point.x, point.y);
+    await expect(chooser).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(chooser).toBeHidden();
+    await expect(paragraphs.first()).toBeFocused();
+
+    const resolve = page.getByRole('dialog', { name: 'Resolve pending selection' });
+    await paragraphs.nth(1).click();
+    await page.keyboard.press('ControlOrMeta+Enter');
+    await expect(resolve).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(resolve).toBeHidden();
+    await expect(paragraphs.nth(1)).toBeFocused();
+    await expect(whisper(page)).toHaveAttribute('data-state', 'pending');
+    const done = page.getByRole('button', { name: 'Done', exact: true });
+    await done.focus();
+    await page.keyboard.press('Enter');
+    await expect(resolve).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(resolve).toBeHidden();
+    await expect(done).toBeFocused();
+    expect(await page.evaluate(() => review.read().length)).toBe(3);
+  });
+
+  test('a remapped shortcut shows in the whisper, strip title, aria-keyshortcuts and help, and works', async ({ page }) => {
+    await page.evaluate(() => {
+      review.destroy();
+      window.review = mountReview(document.querySelector('#fixture'), { ...fixtureOptions, shortcuts: { undo: 'F9' } });
+    });
+    const paragraph = page.locator('.review-document p').first();
+    await paragraph.click();
+    await page.keyboard.press('Alt+ArrowLeft');
+    await expect(page.locator('.review-whisper-status')).toHaveAttribute('data-text', '✓ Accept · F9 undo');
+    const undo = page.locator('[data-command="undo"]');
+    await expect(undo).toHaveAttribute('title', 'Undo (F9)');
+    await expect(undo).toHaveAttribute('aria-keyshortcuts', 'F9');
+    await page.keyboard.press('F1');
+    const help = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(help.locator('.review-key-row', { hasText: /^Undo/ })).toContainText('F9');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('F9');
+    expect(await page.evaluate(() => review.read())).toHaveLength(0);
+  });
+});

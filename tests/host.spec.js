@@ -17,6 +17,35 @@ test('system theme changes, manual persistence and native keyboard toggle work',
   await page.reload(); await expect(button).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('keyboard theme toggle keeps its focus, the pending selection, saved annotations and undo history', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Markdown file').setInputFiles('tests/fixtures/review.md');
+  await page.getByRole('button', { name: 'Start review' }).click();
+  const paragraphs = page.locator('.review-document p'), saved = page.locator('.review-saved-item'), whisper = page.locator('.review-whisper');
+  await paragraphs.first().click();
+  await page.getByRole('button', { name: 'Annotation actions' }).click();
+  await page.getByRole('button', { name: 'Accept', exact: true }).click();
+  await paragraphs.nth(1).click();
+  await expect(whisper).toHaveAttribute('data-state', 'pending');
+  const status = await page.locator('.review-status').textContent();
+  const toggle = page.getByRole('button', { name: 'Night theme', exact: true });
+  const theme = await page.locator('html').getAttribute('data-theme');
+  await toggle.focus();
+  for (const key of ['Space', 'Enter']) {
+    const pressed = await toggle.getAttribute('aria-pressed');
+    await page.keyboard.press(key);
+    await expect(toggle).toHaveAttribute('aria-pressed', String(pressed !== 'true'));
+    await expect(toggle).toBeFocused();
+    await expect(whisper).toHaveAttribute('data-state', 'pending');
+    await expect(saved).toHaveCount(1);
+  }
+  expect(await page.locator('html').getAttribute('data-theme')).toBe(theme);
+  // Switching appearance announces nothing in the annotator.
+  await expect(page.locator('.review-status')).toHaveText(status);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(saved).toHaveCount(0);
+});
+
 test('unavailable preference storage still permits theming, loading and export', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new Error('Storage disabled'); } });
