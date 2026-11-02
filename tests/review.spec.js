@@ -709,7 +709,7 @@ test.describe('accessibility', () => {
     });
   }
 
-  test('a mouse-opened ••• strip collapses on Escape and keeps shortcuts working (Safari does not focus clicked buttons)', async ({ page }) => {
+  test('a mouse-opened ••• strip collapses on Escape and keeps the selection (Safari does not focus clicked buttons)', async ({ page }) => {
     await page.locator('.review-document p').first().click();
     const more = page.locator('.review-more');
     await more.click();
@@ -836,7 +836,8 @@ test.describe('accessibility', () => {
     await page.keyboard.press('Enter');
     await expect(resolve).toBeHidden();
     await expect(done).toBeFocused();
-    expect(await page.evaluate(() => review.read().length)).toBe(3);
+    // The choice is applied on the dialog's queued close event, after Chromium has already returned focus.
+    await expect.poll(() => page.evaluate(() => review.read().length)).toBe(3);
   });
 
   test('a remapped shortcut shows in the whisper, strip title, aria-keyshortcuts and help, and works', async ({ page }) => {
