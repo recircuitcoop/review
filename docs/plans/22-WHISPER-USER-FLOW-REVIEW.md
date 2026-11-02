@@ -79,7 +79,7 @@ The narrow stress case deliberately allows endpoint names to wrap while shorteni
 - [x] Review one coherent storyboard: read → select → label → confirm → undo → continue, including an existing saved annotation. (The user walked this flow in the production app on 2026-11-02 and reported it successful.)
 - [x] Show a multiline range and two long labels in a narrow container for discussion.
 - [x] Correct the new storyboard's commit/Undo/Redo target transitions and distinguish saved editing.
-- [ ] Verify keyboard mode, focus preservation, remapped hints, Escape priority and restrained screen-reader announcements.
+- [ ] Verify keyboard mode, focus preservation, remapped hints, Escape priority and restrained screen-reader announcements. (Partial: keyboard state, focus return, remapped hints, Escape order, single polite announcements and AA contrast in both themes are now automated in Chromium/Firefox/WebKit; offline app rebuilt. The VoiceOver listening pass in [VERIFICATION — Manual: screen reader](../VERIFICATION.md) is open.)
 - [x] Record native-input evidence separately; only then finalize truthful device-specific guidance and proceed to implementation/high fidelity gates. (Native evidence is recorded in [18](18-DESKTOP-HOVER-SCROLL-LABELING.md) and [VERIFICATION](../VERIFICATION.md): the user's 2026-11-02 macOS real-mouse test confirmed left and right labelling with no back navigation. The guidance stays as implemented and is final for desktop: `Unlabeled · scroll ← → over selection`, with the label buttons and keyboard as alternatives. Trackpad and per-browser checks remain open in 18; mobile guidance waits for 19.)
 
 No new hardware tests, user research or production application changes were performed by this review.

@@ -25,7 +25,7 @@ Theme changes preserve pending/native selection, saved annotations, IDs, offsets
 ## Done
 
 - [x] Focused preference/state and browser checks pass; all surfaces use theme-aware colors.
-- [ ] Keyboard/screen-reader state and contrast are verified; offline app rebuilt.
+- [ ] Keyboard/screen-reader state and contrast are verified; offline app rebuilt. (Partial: keyboard state, focus return, remapped hints, Escape order, single polite announcements and AA contrast in both themes are now automated in Chromium/Firefox/WebKit; offline app rebuilt. The VoiceOver listening pass in [VERIFICATION — Manual: screen reader](../VERIFICATION.md) is open.)
 - [x] Usage docs and verification record distinguish completed checks from platform gaps.
 
 Implementation detail: store `light`/`dark` under `review-theme`; an invalid or unavailable preference follows the system until the user clicks the native “Night theme” pressed-state button. Theme pointer interaction retains document focus/selection. Shared `--review-*` variables cover all colors; custom highlights retain light fallbacks for embedding without the stylesheet. Numeric WCAG contrast checks cover normal text (4.5:1), boundaries and focus (3:1), supplemented by real-browser state/presentation checks.
