@@ -23,7 +23,7 @@ Record exact tested browser/OS versions. Automated browser engines and synthetic
 ## Done
 
 - [ ] All 14 seed conditions and shortcut rows map to passing tests or recorded platform evidence; required behavior is not waived.
-- [ ] Actual validation commands/results, supported combinations, and material limitations are documented.
+- [x] Actual validation commands/results, supported combinations, and material limitations are documented. ([VERIFICATION](../VERIFICATION.md): commands, local counts, nine-job Windows/Linux/macOS × Chromium/Firefox/WebKit CI, environment versions and limits.)
 - [ ] No new product scope was introduced; touch and expanded browser coverage remain separate work.
 
 Include plan 15's fresh-app reopen → edit → export → reopen flow and verify both label files from plan 14 before release sign-off.

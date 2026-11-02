@@ -113,10 +113,10 @@ Clicking the sample passage simulates a pending selection. The actions menu and 
 - [x] Explore explicit pending state, actual/updating label names and three collapsible top-bar variants.
 - [x] User chooses Toolbar swap before high fidelity.
 - [x] Refine solid selection underline and one-line whisper with actual label values at opposite ends.
-- [ ] Specify reading, pending, committed, selected-saved, overlap chooser and empty states for the chosen direction.
-- [ ] Specify the complete actions menu, relabel/delete/history, Escape priorities, focus return and long-label behavior.
+- [x] Specify reading, pending, committed, selected-saved, overlap chooser and empty states for the chosen direction. ([IMPLEMENTATION — Widget presentation](../IMPLEMENTATION.md#widget-presentation) and State, gestures, and editing.)
+- [x] Specify the complete actions menu, relabel/delete/history, Escape priorities, focus return and long-label behavior. (Same sections; production-implemented with regression tests via [23](23-WIDGET-HIGH-FIDELITY.md).)
 - [ ] Specify Done with a pending range, save-in-progress, success and retryable failure. Never imply a save before host confirmation.
-- [ ] Produce high-fidelity desktop/narrow and light/night designs of that direction; review together.
+- [x] Produce high-fidelity desktop/narrow and light/night designs of that direction; review together. (Done and user-approved in [23](23-WIDGET-HIGH-FIDELITY.md).)
 - [ ] Verify native selection, layout, focus, accessibility and first-use tasks before implementation acceptance.
 
 ## Acceptance for the chosen design
