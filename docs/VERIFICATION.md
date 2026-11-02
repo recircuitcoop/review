@@ -19,7 +19,9 @@ Changed in plan 26 ([26](plans/26-HIERARCHICAL-AND-MULTI-RANGE-SELECTION.md)): q
 Changed in plan 25 ([25](plans/25-ASSESSMENT-REMEDIATION.md)): Export kept as a user-facing action alongside Done; native horizontal-scroll labeling over the pending highlight replaced the pointer swipe; hi-fi navbar, contextual whisper and keycap help are in production; the controller was split; assessment defects were fixed.
 
 - CI matrix: [run 40967319567](https://github.com/recircuitcoop/review/actions/runs/40967319567) on `647162e` **passed all nine jobs** (Windows/Linux/macOS × Chromium/Firefox/WebKit). Independent verification found and then confirmed the fix for a whisper caret-navigation defect in precise mode.
-- Not verified: native back/forward history-swipe suppression on macOS with Magic Mouse/trackpad in Chrome, Safari and Firefox (manual check in plan 26; Playwright can only prove `defaultPrevented`); first-use study (plan 17); native trackpad/mouse wheel delivery and momentum (18); mobile and physical devices (19/20); screen-reader announcements and OS-reserved shortcuts (13).
+- CI matrix for plan 26: [run 41056037628](https://github.com/recircuitcoop/review/actions/runs/41056037628) on `97dfd85` **passed all nine jobs**; a fourth independent verification confirmed that head.
+- Hand test (2026-11-02): the user tested the plan 26 build on macOS with a real mouse and reported all behaviours working, including left-swipe labeling without back navigation. Browsers and devices were not itemized.
+- Not verified: per-browser and trackpad coverage of back/forward history-swipe suppression beyond that hand test (Playwright can only prove `defaultPrevented`); first-use study (plan 17); native trackpad/mouse wheel delivery and momentum (18); mobile and physical devices (19/20); screen-reader announcements and OS-reserved shortcuts (13).
 - Closed: late wheel momentum no longer labels a newly made selection (continuation guard, plan 26).
 - Tooling: Codebase Memory indexed as project `review` on 2026-10-30 after two orphaned daemons from earlier sessions were stopped. Caveman, TOKF, Serena and MemPalace are usable.
 

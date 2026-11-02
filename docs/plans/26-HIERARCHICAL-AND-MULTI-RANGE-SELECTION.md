@@ -1,6 +1,6 @@
 # 26 — Hierarchical and multi-range selection
 
-Status: implemented; native back-swipe suppression remains a manual check (see below). Date: 2026-10-30. Branch: `feat/hierarchical-multi-selection`.
+Status: implemented; hand-tested by the user on macOS on 2026-11-02 and reported working (see Manual checks). Date: 2026-10-30. Branch: `feat/hierarchical-multi-selection`.
 
 Manual testing of the plan 25 build on macOS with a real mouse rejected three behaviours. These user requirements override the conflicting parts of the specification, plan 25 and `CLAUDE.md`, which are updated in place.
 
@@ -52,6 +52,7 @@ Browser-check page (`tests/browser-check.js`): wheel checks updated to the cance
 ## Manual checks (not provable in Playwright)
 
 - macOS Chrome, Safari and Firefox with Magic Mouse and trackpad: a left swipe over a pending range labels it and the page does not navigate back; a right swipe does not navigate forward; the same swipe outside the selection still navigates.
+- 2026-11-02: the user hand-tested the PR #3 build on macOS with a real mouse and reported every plan 26 behaviour working, including the left swipe labeling instead of navigating back. Browsers and devices beyond that were not itemized.
 
 ## Verifier correction (layout-neutral whisper, section end)
 
