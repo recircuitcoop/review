@@ -84,7 +84,7 @@ Visible shortcut hints and help expand the host's abstract `Mod` binding to **Cm
 
 ## Planned native-scroll and mobile interaction follow-up
 
-Plans [17](plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md)–[20](plans/20-INPUT-UX-ACCEPTANCE.md) document the user-requested correction: desktop hover over pending text plus native horizontal scrolling; no dragged-text/handle requirement, no custom diagonal classifier, no vertical-to-horizontal conversion, no native scrolling/zoom/navigation suppression. The desktop rule above is implemented; the 17 first-use study and native trackpad/mouse evidence remain open. Mobile native text selection and touch classification need a separate prototype and actual iOS/Android proof. No public label/export/restore schema or setup UI is added by this planning work.
+Plans [17](plans/17-NATIVE-SCROLL-UX-PROTOTYPE.md)–[20](plans/20-INPUT-UX-ACCEPTANCE.md) document the user-requested correction: desktop hover over pending text plus native horizontal scrolling; no dragged-text/handle requirement, no custom diagonal classifier, no vertical-to-horizontal conversion, no native scrolling/zoom/navigation suppression. The desktop rule above is implemented; native trackpad/mouse evidence (17) remains open; the user dropped the first-use study on 2026-11-02. Mobile native text selection and touch classification need a separate prototype and actual iOS/Android proof. No public label/export/restore schema or setup UI is added by this planning work.
 
 ## Widget presentation
 

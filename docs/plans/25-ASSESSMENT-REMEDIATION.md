@@ -11,7 +11,7 @@ The trigger rule's "never `preventDefault()`" and the repeat-safety limitation a
 | Topic | Decision | Supersedes |
 | --- | --- | --- |
 | Export | The mounted widget keeps a visible **Export files** control (in the ••• action strip) and the `Mod+Shift+E` shortcut. Done still resolves pending text and runs completion. | 22/23 "no standalone Export control" |
-| Plan 17 → 18 gate | The user directed implementation of 18 ahead of the 17 first-use study. Implementation proceeds; the first-use and native-device gates stay open and no discoverability claim is made. | 17 "18 begins only after this gate" |
+| Plan 17 → 18 gate | The user directed implementation of 18 ahead of the 17 first-use study. Implementation proceeds; the native-device gate stays open. The user dropped the first-use study on 2026-11-02. | 17 "18 begins only after this gate" |
 | Trigger rule | A `wheel` event over the exact pending-highlight rectangles with `deltaX !== 0` **and** `deltaY === 0` (browser-reported pure horizontal input). `deltaX < 0` assigns the left label, `> 0` the right. Events with `ctrlKey`/`metaKey` (zoom chords) never label. No axis ratio, no thresholds, no timers, never `preventDefault()`. Mixed-axis events are ignored, so the rule fails closed: if a device never reports pure horizontal events, buttons and keyboard remain. | 07 pointer thresholds for desktop |
 | Repeat safety | A successful commit clears the pending range, so later events in the same stream do nothing. Late momentum landing on a *newly* made selection cannot be distinguished by portable APIs; recorded as an open native-evidence item, not guarded by invented timing. | — |
 | Pointer swipe | Removed. A pointer drag that begins on pending text performs native text selection (18 contract). `src/gesture.js`, its swipe preview and `touch-action: pan-y` go away; touch labeling remains plan 19 work. | 07 |
@@ -35,7 +35,7 @@ The trigger rule's "never `preventDefault()`" and the repeat-safety limitation a
 
 ## Open after this plan
 
-- 17 first-use study and native trackpad/mouse evidence; 18 native acceptance; 19/20 mobile and physical devices; 13 screen-reader and OS-reserved shortcut checks.
+- 17 native trackpad/mouse evidence (first-use study dropped by the user on 2026-11-02); 18 native acceptance; 19/20 mobile and physical devices; 13 screen-reader and OS-reserved shortcut checks.
 
 ## Done
 
