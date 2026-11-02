@@ -2857,7 +2857,7 @@ function moveFocusWithArrows(modal, event) {
 function createDialogs(root, idPrefix, isDestroyed) {
   let current = null;
   function open(title, content, dismissLabel = "Cancel") {
-    if (current) return null;
+    if (current?.open) return null;
     const previousFocus = document.activeElement;
     const modal = element("dialog", "review-dialog");
     const heading = element("h2", "", title);
@@ -2871,8 +2871,9 @@ function createDialogs(root, idPrefix, isDestroyed) {
     root.append(modal);
     current = modal;
     modal.addEventListener("close", () => {
-      current = null;
       modal.remove();
+      if (current !== modal) return;
+      current = null;
       if (!isDestroyed() && previousFocus?.isConnected) previousFocus.focus();
     }, { once: true });
     modal.addEventListener("cancel", (event) => {
@@ -2890,7 +2891,7 @@ function createDialogs(root, idPrefix, isDestroyed) {
       current?.close(value);
     },
     get isOpen() {
-      return current !== null;
+      return current?.open === true;
     }
   };
 }

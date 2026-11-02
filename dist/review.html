@@ -3095,7 +3095,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   function createDialogs(root, idPrefix, isDestroyed) {
     let current = null;
     function open(title, content, dismissLabel = "Cancel") {
-      if (current) return null;
+      if (current?.open) return null;
       const previousFocus = document.activeElement;
       const modal = element("dialog", "review-dialog");
       const heading = element("h2", "", title);
@@ -3109,8 +3109,9 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       root.append(modal);
       current = modal;
       modal.addEventListener("close", () => {
-        current = null;
         modal.remove();
+        if (current !== modal) return;
+        current = null;
         if (!isDestroyed() && previousFocus?.isConnected) previousFocus.focus();
       }, { once: true });
       modal.addEventListener("cancel", (event) => {
@@ -3128,7 +3129,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         current?.close(value);
       },
       get isOpen() {
-        return current !== null;
+        return current?.open === true;
       }
     };
   }
