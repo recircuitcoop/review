@@ -3499,7 +3499,7 @@ function mountReview(container, options) {
     actions.hidden = !value;
     title.hidden = value;
     more.setAttribute("aria-expanded", String(value));
-    paint();
+    paintWhisperNow();
   }
   listen(more, "click", () => safe(() => setExpanded(!expanded)));
   listen(navbar, "click", (event) => {

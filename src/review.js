@@ -526,7 +526,8 @@ export function mountReview(container, options) {
     actions.hidden = !value;
     title.hidden = value;
     more.setAttribute('aria-expanded', String(value));
-    paint();
+    // Only the whisper hint depends on the strip; a full paint would re-announce the selection.
+    paintWhisperNow();
   }
   listen(more, 'click', () => safe(() => setExpanded(!expanded)));
   listen(navbar, 'click', event => {
